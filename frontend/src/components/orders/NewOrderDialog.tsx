@@ -60,8 +60,8 @@ export function NewOrderDialog({ open, onOpenChange }: Props) {
       }),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['orders'] });
-      setSavedOrderId(res.data.id);
-      toast({ title: `Pedido #${res.data.orderNumber} criado!` });
+      setSavedOrderId(res.data?.id ?? null);
+      toast({ title: `Pedido #${res.data?.orderNumber ?? ''} criado!` });
     },
     onError: (err) => {
       toast({ title: 'Erro ao criar pedido', description: err instanceof Error ? err.message : '', variant: 'destructive' });
@@ -77,12 +77,12 @@ export function NewOrderDialog({ open, onOpenChange }: Props) {
       }),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['suppliers'] });
-      setSupplierId(res.data.id);
+      setSupplierId(res.data?.id ?? '');
       setShowNewSupplier(false);
       setNewSupplierName('');
       setNewSupplierPhone('');
       setNewSupplierEmail('');
-      toast({ title: `Fornecedor "${res.data.name}" criado!` });
+      toast({ title: `Fornecedor "${res.data?.name ?? ''}" criado!` });
     },
     onError: (err) => {
       toast({ title: 'Erro ao criar fornecedor', description: err instanceof Error ? err.message : '', variant: 'destructive' });
