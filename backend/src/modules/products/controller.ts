@@ -13,7 +13,7 @@ import { sendSuccess, sendPaginated } from '../../shared/utils/response';
 
 export async function index(req: Request, res: Response, next: NextFunction) {
   try {
-    const result = await listProducts(req.query as Parameters<typeof listProducts>[0]);
+    const result = await listProducts(req.query as unknown as Parameters<typeof listProducts>[0]);
     return sendPaginated(res, result.products, result.meta);
   } catch (err) {
     next(err);

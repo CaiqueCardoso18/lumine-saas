@@ -125,7 +125,9 @@ export async function updateOrder(id: string, input: UpdateOrderInput) {
   }
 
   const updateData: Prisma.OrderUpdateInput = {
-    supplierId: input.supplierId,
+    ...(input.supplierId !== undefined && {
+      supplier: input.supplierId ? { connect: { id: input.supplierId } } : { disconnect: true },
+    }),
     notes: input.notes,
   };
 

@@ -34,7 +34,7 @@ export async function deleteSupplierHandler(req: Request, res: Response, next: N
 // ─── Orders ───────────────────────────────────────────────────
 export async function index(req: Request, res: Response, next: NextFunction) {
   try {
-    const result = await listOrders(req.query as Parameters<typeof listOrders>[0]);
+    const result = await listOrders(req.query as unknown as Parameters<typeof listOrders>[0]);
     return sendPaginated(res, result.orders, result.meta);
   } catch (err) { next(err); }
 }

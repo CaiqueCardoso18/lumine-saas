@@ -4,7 +4,7 @@ import { sendSuccess, sendPaginated } from '../../shared/utils/response';
 
 export async function index(req: Request, res: Response, next: NextFunction) {
   try {
-    const result = await listSales(req.query as Parameters<typeof listSales>[0]);
+    const result = await listSales(req.query as unknown as Parameters<typeof listSales>[0]);
     return sendPaginated(res, result.sales, result.meta);
   } catch (err) {
     next(err);
