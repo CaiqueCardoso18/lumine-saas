@@ -44,8 +44,6 @@ services:
         condition: service_healthy
     networks:
       - lumine-net
-    ports:
-      - "4000:4000"
     logging:
       driver: "json-file"
       options:
@@ -59,14 +57,33 @@ services:
     container_name: lumine-frontend
     restart: always
     environment:
-      # BACKEND_URL é usado pelo Next.js server-side (rewrites) — não exposto ao browser
       BACKEND_URL: http://lumine-backend:4000
     depends_on:
       - backend
     networks:
       - lumine-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: lumine-caddy
+    restart: always
     ports:
-      - "3000:3000"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.prod:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - lumine-net
+    depends_on:
+      - frontend
+      - backend
     logging:
       driver: "json-file"
       options:
@@ -75,6 +92,10 @@ services:
 
 volumes:
   pgdata:
+    driver: local
+  caddy_data:
+    driver: local
+  caddy_config:
     driver: local
 
 networks:

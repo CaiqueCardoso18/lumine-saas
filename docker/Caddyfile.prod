@@ -1,0 +1,17 @@
+{
+    admin off
+}
+
+:80 {
+    encode gzip
+
+    # /api/* vai direto para o backend
+    handle /api/* {
+        reverse_proxy lumine-backend:4000
+    }
+
+    # tudo o resto vai para o frontend Next.js
+    handle {
+        reverse_proxy lumine-frontend:3000
+    }
+}
