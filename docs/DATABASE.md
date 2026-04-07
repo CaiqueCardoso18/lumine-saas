@@ -1,0 +1,370 @@
+# Lumine SaaS — Database Schema
+
+## Prisma Schema
+
+```prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// AUTH & USERS
+// ============================================================
+
+enum UserRole {
+  OWNER
+  EMPLOYEE
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  name         String
+  role         UserRole  @default(EMPLOYEE)
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  sales        Sale[]
+  auditLogs    AuditLog[]
+
+  @@map("users")
+}
+
+// ============================================================
+// PRODUCTS & INVENTORY
+// ============================================================
+
+model Category {
+  id           String    @id @default(cuid())
+  name         String    @unique
+  slug         String    @unique
+  icon         String?
+  sortOrder    Int       @default(0) @map("sort_order")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  subcategories Subcategory[]
+  products      Product[]
+
+  @@map("categories")
+}
+
+model Subcategory {
+  id           String    @id @default(cuid())
+  name         String
+  slug         String
+  categoryId   String    @map("category_id")
+  sortOrder    Int       @default(0) @map("sort_order")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  category     Category  @relation(fields: [categoryId], references: [id])
+  products     Product[]
+
+  @@unique([categoryId, slug])
+  @@map("subcategories")
+}
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+  DISCONTINUED
+}
+
+model Product {
+  id             String        @id @default(cuid())
+  sku            String        @unique
+  name           String
+  description    String?
+  categoryId     String        @map("category_id")
+  subcategoryId  String?       @map("subcategory_id")
+  brand          String?
+  size           String?
+  color          String?
+  costPrice      Decimal       @map("cost_price") @db.Decimal(10, 2)
+  salePrice      Decimal       @map("sale_price") @db.Decimal(10, 2)
+  quantity       Int           @default(0)
+  minStock       Int           @default(5) @map("min_stock")
+  imageUrl       String?       @map("image_url")
+  status         ProductStatus @default(ACTIVE)
+  barcode        String?
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  deletedAt      DateTime?     @map("deleted_at")
+
+  category       Category      @relation(fields: [categoryId], references: [id])
+  subcategory    Subcategory?  @relation(fields: [subcategoryId], references: [id])
+  saleItems      SaleItem[]
+  orderItems     OrderItem[]
+  auditLogs      AuditLog[]
+
+  @@index([sku])
+  @@index([name])
+  @@index([categoryId])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("products")
+}
+
+// ============================================================
+// SALES (PDV)
+// ============================================================
+
+enum PaymentMethod {
+  CASH
+  PIX
+  DEBIT_CARD
+  CREDIT_CARD
+  MIXED
+}
+
+enum SaleStatus {
+  COMPLETED
+  CANCELLED
+}
+
+model Sale {
+  id              String        @id @default(cuid())
+  saleNumber      Int           @unique @default(autoincrement()) @map("sale_number")
+  userId          String        @map("user_id")
+  subtotal        Decimal       @db.Decimal(10, 2)
+  discountAmount  Decimal       @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  discountPercent Decimal?      @map("discount_percent") @db.Decimal(5, 2)
+  total           Decimal       @db.Decimal(10, 2)
+  paymentMethod   PaymentMethod @map("payment_method")
+  status          SaleStatus    @default(COMPLETED)
+  notes           String?
+  cancelledAt     DateTime?     @map("cancelled_at")
+  cancelReason    String?       @map("cancel_reason")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  user            User          @relation(fields: [userId], references: [id])
+  items           SaleItem[]
+  payments        SalePayment[]
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([paymentMethod])
+  @@map("sales")
+}
+
+model SaleItem {
+  id            String   @id @default(cuid())
+  saleId        String   @map("sale_id")
+  productId     String   @map("product_id")
+  productName   String   @map("product_name")
+  productSku    String   @map("product_sku")
+  quantity      Int
+  unitPrice     Decimal  @map("unit_price") @db.Decimal(10, 2)
+  costPrice     Decimal  @map("cost_price") @db.Decimal(10, 2)
+  discount      Decimal  @default(0) @db.Decimal(10, 2)
+  total         Decimal  @db.Decimal(10, 2)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  sale          Sale     @relation(fields: [saleId], references: [id])
+  product       Product  @relation(fields: [productId], references: [id])
+
+  @@map("sale_items")
+}
+
+// Para pagamento misto (parte PIX, parte cartão, etc.)
+model SalePayment {
+  id            String        @id @default(cuid())
+  saleId        String        @map("sale_id")
+  method        PaymentMethod
+  amount        Decimal       @db.Decimal(10, 2)
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  sale          Sale          @relation(fields: [saleId], references: [id])
+
+  @@map("sale_payments")
+}
+
+// ============================================================
+// ORDERS (REPOSIÇÃO / COMPRAS)
+// ============================================================
+
+enum OrderStatus {
+  DRAFT
+  SENT
+  RECEIVED
+  CHECKED
+  CANCELLED
+}
+
+model Supplier {
+  id           String    @id @default(cuid())
+  name         String
+  contactName  String?   @map("contact_name")
+  phone        String?
+  email        String?
+  notes        String?
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  orders       Order[]
+
+  @@map("suppliers")
+}
+
+model Order {
+  id           String      @id @default(cuid())
+  orderNumber  Int         @unique @default(autoincrement()) @map("order_number")
+  supplierId   String?     @map("supplier_id")
+  status       OrderStatus @default(DRAFT)
+  totalCost    Decimal     @default(0) @map("total_cost") @db.Decimal(10, 2)
+  notes        String?
+  sentAt       DateTime?   @map("sent_at")
+  receivedAt   DateTime?   @map("received_at")
+  checkedAt    DateTime?   @map("checked_at")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  supplier     Supplier?   @relation(fields: [supplierId], references: [id])
+  items        OrderItem[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id               String   @id @default(cuid())
+  orderId          String   @map("order_id")
+  productId        String   @map("product_id")
+  quantityOrdered  Int      @map("quantity_ordered")
+  quantityReceived Int?     @map("quantity_received")
+  unitCost         Decimal  @map("unit_cost") @db.Decimal(10, 2)
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  order            Order    @relation(fields: [orderId], references: [id])
+  product          Product  @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+// ============================================================
+// UPLOAD / IMPORT
+// ============================================================
+
+enum ImportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Import {
+  id             String       @id @default(cuid())
+  fileName       String       @map("file_name")
+  totalRows      Int          @map("total_rows")
+  createdCount   Int          @default(0) @map("created_count")
+  updatedCount   Int          @default(0) @map("updated_count")
+  errorCount     Int          @default(0) @map("error_count")
+  status         ImportStatus @default(PENDING)
+  errors         Json?
+  createdAt      DateTime     @default(now()) @map("created_at")
+  completedAt    DateTime?    @map("completed_at")
+
+  @@index([createdAt])
+  @@map("imports")
+}
+
+// ============================================================
+// AUDIT LOG
+// ============================================================
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  STOCK_CHANGE
+  PRICE_CHANGE
+  BULK_UPDATE
+  IMPORT
+  SALE
+  SALE_CANCEL
+  ORDER_STATUS_CHANGE
+}
+
+model AuditLog {
+  id          String      @id @default(cuid())
+  userId      String?     @map("user_id")
+  productId   String?     @map("product_id")
+  action      AuditAction
+  entityType  String      @map("entity_type")
+  entityId    String      @map("entity_id")
+  oldValue    Json?       @map("old_value")
+  newValue    Json?       @map("new_value")
+  metadata    Json?
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  user        User?       @relation(fields: [userId], references: [id])
+  product     Product?    @relation(fields: [productId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ============================================================
+// SETTINGS
+// ============================================================
+
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+```
+
+---
+
+## Entity Relationship Summary
+
+```
+User ──────┐
+           ├──► Sale ──► SaleItem ──► Product
+           │         └──► SalePayment
+           └──► AuditLog ──► Product
+                              │
+Category ──► Subcategory ─────┘
+                              │
+Supplier ──► Order ──► OrderItem ──► Product
+                              │
+                          Import (standalone)
+                          Setting (standalone)
+```
+
+## Índices e Performance
+
+- Todos os campos usados em filtros/busca têm índice
+- `deletedAt` indexado para queries eficientes com soft delete
+- `createdAt` indexado em Sales e Orders para queries de analytics
+- Campos monetários usam `Decimal(10,2)` para precisão
+
+## Seed Data (Categorias Iniciais)
+
+As categorias de dança que serão pré-populadas:
+
+1. Collants
+2. Sapatilhas (Ballet, Jazz, Contemporâneo)
+3. Meias e Acessórios para Pés
+4. Saias e Tutus
+5. Shorts e Leggings
+6. Tops e Bodys
+7. Aquecedores e Agasalhos
+8. Acessórios (faixas, tiaras, elásticos)
+9. Figurinos
+10. Bolsas e Mochilas
+11. Calçados (Pontas, Meia-ponta, Jazz shoes)

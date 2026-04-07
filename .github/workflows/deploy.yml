@@ -1,0 +1,56 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy para VPS Hetzner
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: deploy
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script: |
+            set -e
+            echo "🚀 Iniciando deploy Lumine..."
+
+            cd /home/deploy/lumine_saas
+
+            # Pull das últimas alterações
+            git pull origin main
+
+            # Criar .env de produção a partir dos secrets (se não existir)
+            cat > /home/deploy/lumine_saas/.env.prod << 'ENVEOF'
+            DB_NAME=${{ secrets.DB_NAME }}
+            DB_USER=${{ secrets.DB_USER }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            FRONTEND_URL=${{ secrets.FRONTEND_URL }}
+            API_URL=${{ secrets.API_URL }}
+            ENVEOF
+
+            # Build e subir containers
+            cd docker
+            docker compose -f docker-compose.prod.yml --env-file /home/deploy/lumine_saas/.env.prod build
+
+            # Migrations antes de subir (conexão direta com o container postgres)
+            docker compose -f docker-compose.prod.yml --env-file /home/deploy/lumine_saas/.env.prod up -d postgres
+            sleep 5
+            docker compose -f docker-compose.prod.yml --env-file /home/deploy/lumine_saas/.env.prod run --rm backend sh -c "npx prisma migrate deploy"
+
+            # Subir todos os serviços
+            docker compose -f docker-compose.prod.yml --env-file /home/deploy/lumine_saas/.env.prod up -d
+
+            # Limpeza de imagens antigas
+            docker image prune -f
+
+            echo "✅ Deploy concluído!"

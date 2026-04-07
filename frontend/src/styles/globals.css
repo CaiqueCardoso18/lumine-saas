@@ -1,0 +1,98 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,600&family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 40 30% 98%;
+    --foreground: 30 10% 22%;
+    --card: 0 0% 100%;
+    --card-foreground: 30 10% 22%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 30 10% 22%;
+    --primary: 271 22% 73%;
+    --primary-foreground: 271 22% 20%;
+    --secondary: 150 10% 40%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 40 20% 95%;
+    --muted-foreground: 30 8% 55%;
+    --accent: 271 30% 90%;
+    --accent-foreground: 271 22% 35%;
+    --destructive: 0 60% 65%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 271 20% 88%;
+    --input: 271 20% 88%;
+    --ring: 271 22% 73%;
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-lumine-cream text-lumine-charcoal font-sans antialiased;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading text-lumine-sage-dark;
+  }
+}
+
+@layer components {
+  .lumine-card {
+    @apply bg-white rounded-2xl shadow-sm border border-lumine-lavender-pale p-6;
+  }
+
+  .lumine-btn-primary {
+    @apply bg-lumine-lavender hover:bg-lumine-lavender-light text-white font-medium
+           px-4 py-2 rounded-xl transition-all duration-200 shadow-sm hover:shadow;
+  }
+
+  .lumine-btn-ghost {
+    @apply text-lumine-sage hover:bg-lumine-lavender-pale hover:text-lumine-sage-dark
+           px-4 py-2 rounded-xl transition-all duration-200;
+  }
+
+  .lumine-input {
+    @apply border-lumine-lavender-pale focus:border-lumine-lavender focus:ring-lumine-lavender
+           rounded-xl bg-white placeholder:text-lumine-warm-gray;
+  }
+
+  .lumine-badge-success {
+    @apply bg-lumine-success/10 text-lumine-success border border-lumine-success/20
+           text-xs font-medium px-2 py-0.5 rounded-full;
+  }
+
+  .lumine-badge-danger {
+    @apply bg-lumine-danger/10 text-lumine-danger border border-lumine-danger/20
+           text-xs font-medium px-2 py-0.5 rounded-full;
+  }
+
+  .lumine-badge-warning {
+    @apply bg-lumine-gold/10 text-lumine-gold border border-lumine-gold/20
+           text-xs font-medium px-2 py-0.5 rounded-full;
+  }
+
+  .lumine-gold-value {
+    @apply text-lumine-gold font-semibold font-heading;
+  }
+}
+
+/* Scrollbar personalizada */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #D4C8E2;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #B8A9C9;
+}

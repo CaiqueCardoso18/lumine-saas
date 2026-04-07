@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sed -i 's/Lumine Ateliê/Lumine/g; s/Lumine Atelie/Lumine/g' \"C:/Users/Caique/lumine_saas/docs/vps-setup.sh\" \"C:/Users/Caique/lumine_saas/wireframe-dashboard.jsx\")",
+      "Bash(sed -i 's/ateliê/Lumine/g; s/atelie/Lumine/g' \"C:/Users/Caique/lumine_saas/wireframe-dashboard.jsx\")",
+      "Bash(npx prisma:*)",
+      "Bash(tail -5 \"C:\\\\Users\\\\Caique\\\\lumine_saas\\\\frontend\\\\src\\\\app\\\\\\(dashboard\\)\\\\orders\\\\page.tsx\")",
+      "Bash(2)",
+      "Bash(1:*)",
+      "Bash(node -e \":*)",
+      "Bash(curl -s \"http://localhost:4000/api/analytics/revenue?period=month&groupBy=day\" -H \"Cookie: token=\")"
+    ]
+  }
+}
