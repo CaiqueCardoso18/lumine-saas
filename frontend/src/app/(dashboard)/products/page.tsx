@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
@@ -31,7 +32,7 @@ const STATUS_LABELS: Record<string, string> = {
   DISCONTINUED: 'Descontinuado',
 };
 
-export default function ProductsPage() {
+function ProductsPageContent() {
   const qc = useQueryClient();
   const searchParams = useSearchParams();
 
@@ -364,5 +365,13 @@ export default function ProductsPage() {
 
       <ProductFormDialog open={dialogOpen} onOpenChange={setDialogOpen} product={editProduct} />
     </motion.div>
+  );
+}
+
+export default function ProductsPage() {
+  return (
+    <Suspense>
+      <ProductsPageContent />
+    </Suspense>
   );
 }

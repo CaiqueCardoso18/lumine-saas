@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
@@ -16,7 +17,7 @@ import { toast } from '@/hooks/use-toast';
 import { NewSaleDialog } from '@/components/sales/NewSaleDialog';
 import { SaleDetailDialog } from '@/components/sales/SaleDetailDialog';
 
-export default function SalesPage() {
+function SalesPageContent() {
   const qc = useQueryClient();
   const searchParams = useSearchParams();
   const [newSaleOpen, setNewSaleOpen] = useState(false);
@@ -174,5 +175,13 @@ export default function SalesPage() {
         <SaleDetailDialog sale={selectedSale} onClose={() => setSelectedSale(null)} />
       )}
     </motion.div>
+  );
+}
+
+export default function SalesPage() {
+  return (
+    <Suspense>
+      <SalesPageContent />
+    </Suspense>
   );
 }
