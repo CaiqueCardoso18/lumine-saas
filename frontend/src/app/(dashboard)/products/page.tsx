@@ -223,7 +223,7 @@ function ProductsPageContent() {
         <CardContent className="p-0">
           {/* Header row */}
           {products.length > 0 && (
-            <div className="flex items-center gap-4 px-6 py-3 border-b border-lumine-lavender-pale bg-lumine-cream/50">
+            <div className="flex items-center gap-2 sm:gap-4 px-3 sm:px-6 py-3 border-b border-lumine-lavender-pale bg-lumine-cream/50">
               {canManage && (
                 <button onClick={toggleAll} className="text-lumine-warm-gray hover:text-lumine-lavender transition-colors shrink-0">
                   {allSelected
@@ -264,7 +264,7 @@ function ProductsPageContent() {
                   key={product.id}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className={`flex items-center gap-4 px-6 py-4 transition-colors group ${
+                  className={`flex items-center gap-2 sm:gap-4 px-3 sm:px-6 py-4 transition-colors group ${
                     selectedIds.has(product.id)
                       ? 'bg-lumine-lavender-pale/40'
                       : 'hover:bg-lumine-lavender-pale/20'
@@ -328,7 +328,7 @@ function ProductsPageContent() {
 
                   {/* Actions */}
                   {canManage && (
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity w-16 justify-end">
+                    <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity w-16 justify-end">
                       <Button
                         variant="ghost"
                         size="icon"

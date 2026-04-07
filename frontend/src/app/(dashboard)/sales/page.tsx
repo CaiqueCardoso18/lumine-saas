@@ -59,7 +59,7 @@ function SalesPageContent() {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       {/* Summary KPIs */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         {[
           { label: 'Vendas hoje', value: String(summary?.totalSales ?? 0) },
           { label: 'Faturamento', value: formatCurrency(summary?.totalRevenue ?? 0) },
@@ -73,7 +73,7 @@ function SalesPageContent() {
       </div>
 
       {/* Toolbar */}
-      <div className="flex gap-3 justify-between">
+      <div className="flex flex-wrap gap-3 justify-between">
         <div className="relative max-w-sm flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-lumine-warm-gray" strokeWidth={1.5} />
           <Input placeholder="Buscar venda..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -112,7 +112,7 @@ function SalesPageContent() {
               {sales.map((sale) => (
                 <div
                   key={sale.id}
-                  className="flex items-center gap-4 px-6 py-4 hover:bg-lumine-lavender-pale/30 transition-colors group"
+                  className="flex items-center gap-3 sm:gap-4 px-3 sm:px-6 py-4 hover:bg-lumine-lavender-pale/30 transition-colors group"
                 >
                   <div className="w-10 h-10 rounded-xl bg-lumine-lavender-pale flex items-center justify-center shrink-0">
                     <ShoppingCart size={16} strokeWidth={1.5} className="text-lumine-lavender" />
@@ -135,7 +135,7 @@ function SalesPageContent() {
                     {formatCurrency(sale.total)}
                   </span>
 
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedSale(sale)}>
                       <Eye size={14} strokeWidth={1.5} />
                     </Button>

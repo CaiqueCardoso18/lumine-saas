@@ -1,12 +1,13 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { Bell, LogOut, User } from 'lucide-react';
+import { Bell, LogOut, User, Menu } from 'lucide-react';
 import { useAuth, useLogout } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Insight } from '@/types';
+import { useSidebar } from './SidebarContext';
 
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard': 'Dashboard',
@@ -23,6 +24,7 @@ export function Header() {
   const pathname = usePathname();
   const { user } = useAuth();
   const logout = useLogout();
+  const { toggle } = useSidebar();
 
   const { data: insightsData } = useQuery({
     queryKey: ['insights', 'stock'],
@@ -37,12 +39,21 @@ export function Header() {
   )?.[1] ?? 'Lumine';
 
   return (
-    <header className="h-16 flex items-center justify-between px-6 bg-white border-b border-lumine-lavender-pale shrink-0">
-      {/* Title */}
-      <h1 className="font-heading text-2xl text-lumine-sage-dark">{title}</h1>
+    <header className="h-16 flex items-center justify-between px-4 sm:px-6 bg-white border-b border-lumine-lavender-pale shrink-0">
+      <div className="flex items-center gap-3">
+        {/* Hamburger — só aparece em mobile */}
+        <button
+          onClick={toggle}
+          className="md:hidden p-2 rounded-xl hover:bg-lumine-lavender-pale transition-colors"
+          aria-label="Abrir menu"
+        >
+          <Menu size={20} strokeWidth={1.5} className="text-lumine-sage-dark" />
+        </button>
+        <h1 className="font-heading text-xl sm:text-2xl text-lumine-sage-dark">{title}</h1>
+      </div>
 
       {/* Right */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
         {/* Notificações */}
         <button className="relative p-2 rounded-xl hover:bg-lumine-lavender-pale transition-colors">
           <Bell size={20} strokeWidth={1.5} className="text-lumine-warm-gray" />
@@ -54,7 +65,7 @@ export function Header() {
         </button>
 
         {/* User info */}
-        <div className="flex items-center gap-2 pl-3 border-l border-lumine-lavender-pale">
+        <div className="flex items-center gap-2 pl-2 sm:pl-3 border-l border-lumine-lavender-pale">
           <div className="w-8 h-8 rounded-full bg-lumine-lavender-pale flex items-center justify-center">
             <User size={16} strokeWidth={1.5} className="text-lumine-lavender" />
           </div>

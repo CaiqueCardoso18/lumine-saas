@@ -1,8 +1,4 @@
-{
-    admin off
-}
-
-:80 {
+lumine.io, www.lumine.io {
     encode gzip
 
     # /api/* vai direto para o backend

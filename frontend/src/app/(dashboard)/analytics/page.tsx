@@ -70,7 +70,7 @@ export default function AnalyticsPage() {
     <PermissionGuard permission="view_analytics">
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       {/* Period selector */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {PERIODS.map((p) => (
           <Button
             key={p.value}
@@ -84,7 +84,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {[
           { label: 'Faturamento', value: formatCurrency(revenue?.summary.totalRevenue ?? 0) },
           { label: 'Vendas', value: String(revenue?.summary.totalSales ?? 0) },
