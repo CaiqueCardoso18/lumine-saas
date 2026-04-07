@@ -1,6 +1,8 @@
 import { ApiResponse, PaginatedResponse } from '@/types';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+// Em produção o Next.js proxia /api/* para o backend via rewrites no next.config.js
+// Em dev local, aponta diretamente para localhost:4000
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
 class ApiError extends Error {
   constructor(

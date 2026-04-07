@@ -59,7 +59,8 @@ services:
     container_name: lumine-frontend
     restart: always
     environment:
-      NEXT_PUBLIC_API_URL: ${API_URL}
+      # BACKEND_URL é usado pelo Next.js server-side (rewrites) — não exposto ao browser
+      BACKEND_URL: http://lumine-backend:4000
     depends_on:
       - backend
     networks:
