@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// BACKEND_URL é resolvido em runtime (não build time), então funciona em Docker
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:4000';
 
 async function handler(
@@ -11,26 +10,32 @@ async function handler(
   const search = req.nextUrl.search;
   const targetUrl = `${BACKEND_URL}/api/${path}${search}`;
 
-  // Propaga todos os headers (incluindo Cookie para JWT httpOnly)
   const headers = new Headers();
   req.headers.forEach((value, key) => {
-    // Evita headers que o fetch resolve automaticamente
-    if (!['host', 'connection', 'transfer-encoding'].includes(key.toLowerCase())) {
+    if (!['host', 'connection', 'transfer-encoding', 'content-length'].includes(key.toLowerCase())) {
       headers.set(key, value);
     }
   });
 
   const isBodyMethod = !['GET', 'HEAD'].includes(req.method);
 
+  let body: Buffer | undefined;
+  if (isBodyMethod) {
+    // Bufferiza o body para que o Express receba Content-Length correto
+    const ab = await req.arrayBuffer();
+    body = Buffer.from(ab);
+    if (body.length > 0) {
+      headers.set('content-length', String(body.length));
+    }
+  }
+
   const response = await fetch(targetUrl, {
     method: req.method,
     headers,
-    body: isBodyMethod ? req.body : undefined,
-    // @ts-expect-error duplex needed for streaming body
-    duplex: isBodyMethod ? 'half' : undefined,
+    body: body && body.length > 0 ? body : undefined,
   });
 
-  // Propaga headers de resposta (incluindo Set-Cookie)
+  // Propaga headers de resposta (incluindo Set-Cookie para o JWT httpOnly)
   const resHeaders = new Headers();
   response.headers.forEach((value, key) => {
     resHeaders.set(key, value);
