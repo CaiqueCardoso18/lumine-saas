@@ -3,7 +3,7 @@ import { Providers } from './providers';
 import '@/styles/globals.css';
 
 export const metadata: Metadata = {
-  title: 'Lumine — Gestão',
+  title: 'Lumine.io',
   description: 'Sistema de gestão completo para a Lumine',
 };
 

@@ -30,7 +30,8 @@ export function useLogin() {
       api.post<{ user: User }>('/api/auth/login', credentials),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['auth', 'me'] });
-      router.push('/dashboard');
+      // Full page reload para o middleware do Next.js ler o cookie httpOnly
+      window.location.href = '/dashboard';
     },
   });
 }

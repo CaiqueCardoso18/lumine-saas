@@ -51,7 +51,7 @@ export function Sidebar() {
                 <span className="text-white text-xs font-accent font-bold">L</span>
               </div>
               <span className="text-white font-accent font-semibold text-lg whitespace-nowrap">
-                Lumine
+                Lumine.io
               </span>
             </motion.div>
           ) : (

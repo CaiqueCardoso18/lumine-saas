@@ -62,7 +62,7 @@ export default function LoginPage() {
             <div className="w-16 h-16 rounded-full bg-lumine-lavender mx-auto flex items-center justify-center mb-4 shadow-sm">
               <span className="text-white text-2xl font-accent font-bold">L</span>
             </div>
-            <h1 className="font-heading text-3xl text-lumine-sage-dark">Lumine</h1>
+            <h1 className="font-heading text-3xl text-lumine-sage-dark">Lumine.io</h1>
             <p className="text-lumine-warm-gray text-sm mt-1">Sistema de Gestão</p>
           </div>
 
