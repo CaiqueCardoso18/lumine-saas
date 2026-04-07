@@ -19,11 +19,11 @@ async function handler(
 
   const isBodyMethod = !['GET', 'HEAD'].includes(req.method);
 
-  let body: Buffer | undefined;
+  let body: Uint8Array | undefined;
   if (isBodyMethod) {
     // Bufferiza o body para que o Express receba Content-Length correto
     const ab = await req.arrayBuffer();
-    body = Buffer.from(ab);
+    body = new Uint8Array(ab);
     if (body.length > 0) {
       headers.set('content-length', String(body.length));
     }
