@@ -19,20 +19,19 @@ async function handler(
 
   const isBodyMethod = !['GET', 'HEAD'].includes(req.method);
 
-  let body: Uint8Array | undefined;
+  let bodyData: string | undefined;
   if (isBodyMethod) {
-    // Bufferiza o body para que o Express receba Content-Length correto
-    const ab = await req.arrayBuffer();
-    body = new Uint8Array(ab);
-    if (body.length > 0) {
-      headers.set('content-length', String(body.length));
+    // Bufferiza o body como string para que o Express receba Content-Length correto
+    bodyData = await req.text();
+    if (bodyData.length > 0) {
+      headers.set('content-length', String(Buffer.byteLength(bodyData, 'utf-8')));
     }
   }
 
   const response = await fetch(targetUrl, {
     method: req.method,
     headers,
-    body: body && body.length > 0 ? body : undefined,
+    body: bodyData && bodyData.length > 0 ? bodyData : undefined,
   });
 
   // Propaga headers de resposta (incluindo Set-Cookie para o JWT httpOnly)
