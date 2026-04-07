@@ -5,7 +5,8 @@ import { env } from '../../config/env';
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: env.NODE_ENV === 'production',
+  // COOKIE_SECURE=true só quando houver HTTPS (não setar em HTTP puro)
+  secure: process.env.COOKIE_SECURE === 'true',
   sameSite: 'lax' as const,
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
 };
