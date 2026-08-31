@@ -4,6 +4,14 @@ import { AppError } from '../../shared/errors/AppError';
 import { createAuditLog } from '../../shared/utils/auditLog';
 import { aggregateVariants, categoryKey, parseAudience, VariantRow } from './helpers';
 
+/**
+ * Como tratar a quantidade de produtos que JÁ existem:
+ * - 'replace': o estoque passa a ser o valor da planilha (padrão)
+ * - 'add': soma o valor da planilha ao estoque atual (recebimento de mercadoria)
+ * Produtos novos sempre entram com a quantidade da planilha, nos dois modos.
+ */
+export type StockMode = 'replace' | 'add';
+
 const REQUIRED_COLUMNS = ['sku', 'nome', 'quantidade', 'preco_venda'];
 const OPTIONAL_COLUMNS = ['preco_custo', 'categoria', 'marca', 'tamanho', 'cor', 'publico', 'descricao', 'descricao_curta', 'barcode'];
 
@@ -47,6 +55,8 @@ interface PreviewItem {
   quantity: number;
   salePrice: number;
   action: 'create' | 'update';
+  /** Estoque final depois de aplicar o modo escolhido (replace ou add) */
+  resultingQuantity?: number;
   /** Tamanho/cor/público da variante, para o usuário conferir no preview */
   size?: string;
   color?: string;
@@ -101,7 +111,7 @@ function parseRow(raw: RawRow, rowIndex: number): { data?: ParsedRow; error?: st
   };
 }
 
-export async function previewUpload(fileBuffer: Buffer, fileName: string) {
+export async function previewUpload(fileBuffer: Buffer, fileName: string, stockMode: StockMode = 'replace') {
   const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows = xlsx.utils.sheet_to_json<RawRow>(sheet, { defval: '' });
@@ -143,11 +153,15 @@ export async function previewUpload(fileBuffer: Buffer, fileName: string) {
 
   const preview: PreviewItem[] = variants.map((v) => {
     const existing = existingMap.get(v.variantSku);
+    // No modo 'add' o estoque final é o atual + o da planilha
+    const resultingQuantity =
+      existing && stockMode === 'add' ? existing.quantity + v.quantity : v.quantity;
     return {
       row: v.sourceRows[0],
       sku: v.variantSku,
       name: v.name,
       quantity: v.quantity,
+      resultingQuantity,
       salePrice: v.salePrice,
       size: v.size,
       color: v.color,
@@ -162,6 +176,7 @@ export async function previewUpload(fileBuffer: Buffer, fileName: string) {
 
   return {
     fileName,
+    stockMode,
     totalRows: rows.length,
     /** Nº de variantes distintas depois do agrupamento */
     totalVariants: variants.length,
@@ -175,7 +190,7 @@ export async function previewUpload(fileBuffer: Buffer, fileName: string) {
   };
 }
 
-export async function confirmUpload(fileBuffer: Buffer, fileName: string, userId: string) {
+export async function confirmUpload(fileBuffer: Buffer, fileName: string, userId: string, stockMode: StockMode = 'replace') {
   const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows = xlsx.utils.sheet_to_json<RawRow>(sheet, { defval: '' });
@@ -238,7 +253,7 @@ export async function confirmUpload(fileBuffer: Buffer, fileName: string, userId
         await prisma.product.update({
           where: { id: existing.id },
           data: {
-            quantity: v.quantity,
+            quantity: stockMode === 'add' ? existing.quantity + v.quantity : v.quantity,
             salePrice: v.salePrice,
             ...(v.costPrice && { costPrice: v.costPrice }),
             name: v.name,
@@ -300,11 +315,12 @@ export async function confirmUpload(fileBuffer: Buffer, fileName: string, userId
     entityType: 'import',
     entityId: importRecord.id,
     userId,
-    metadata: { fileName, createdCount, updatedCount, errorCount: errors.length } as object,
+    metadata: { fileName, stockMode, createdCount, updatedCount, errorCount: errors.length } as object,
   });
 
   return {
     importId: importRecord.id,
+    stockMode,
     createdCount,
     updatedCount,
     errorCount: errors.length,

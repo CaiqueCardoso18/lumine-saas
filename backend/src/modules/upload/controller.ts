@@ -1,12 +1,21 @@
 import { Request, Response, NextFunction } from 'express';
-import { previewUpload, confirmUpload, getImportHistory } from './service';
+import { previewUpload, confirmUpload, getImportHistory, StockMode } from './service';
 import { sendSuccess } from '../../shared/utils/response';
 import { AppError } from '../../shared/errors/AppError';
+
+/** Lê o modo de estoque do form-data; qualquer coisa fora de 'add' vira 'replace'. */
+function readStockMode(value: unknown): StockMode {
+  return value === 'add' ? 'add' : 'replace';
+}
 
 export async function preview(req: Request, res: Response, next: NextFunction) {
   try {
     if (!req.file) throw new AppError('Arquivo não enviado');
-    const result = await previewUpload(req.file.buffer, req.file.originalname);
+    const result = await previewUpload(
+      req.file.buffer,
+      req.file.originalname,
+      readStockMode(req.body?.stockMode)
+    );
     return sendSuccess(res, result);
   } catch (err) {
     next(err);
@@ -16,7 +25,12 @@ export async function preview(req: Request, res: Response, next: NextFunction) {
 export async function confirm(req: Request, res: Response, next: NextFunction) {
   try {
     if (!req.file) throw new AppError('Arquivo não enviado');
-    const result = await confirmUpload(req.file.buffer, req.file.originalname, req.user!.userId);
+    const result = await confirmUpload(
+      req.file.buffer,
+      req.file.originalname,
+      req.user!.userId,
+      readStockMode(req.body?.stockMode)
+    );
     return sendSuccess(res, result, 201);
   } catch (err) {
     next(err);

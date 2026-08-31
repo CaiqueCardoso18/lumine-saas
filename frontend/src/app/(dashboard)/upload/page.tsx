@@ -23,12 +23,21 @@ interface PreviewItem {
   quantity: number;
   salePrice: number;
   action: 'create' | 'update';
+  resultingQuantity?: number;
+  size?: string;
+  color?: string;
+  mergedRows?: number;
   currentData?: { name: string; quantity: number; salePrice: number } | null;
 }
 
+type StockMode = 'replace' | 'add';
+
 interface PreviewData {
   fileName: string;
+  stockMode: StockMode;
   totalRows: number;
+  totalVariants: number;
+  mergedRows: number;
   toCreate: number;
   toUpdate: number;
   errorCount: number;
@@ -40,6 +49,7 @@ export default function UploadPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<PreviewData | null>(null);
+  const [stockMode, setStockMode] = useState<StockMode>('replace');
   const [isLoading, setIsLoading] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const [result, setResult] = useState<{
@@ -57,15 +67,15 @@ export default function UploadPage() {
 
   const history = historyData?.data ?? [];
 
-  const handleFile = async (file: File) => {
+  const handleFile = async (file: File, mode: StockMode = stockMode) => {
     setSelectedFile(file);
-    setPreview(null);
     setResult(null);
     setIsLoading(true);
 
     try {
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('stockMode', mode);
 
       const data = await api.upload<PreviewData>('/api/upload/preview', formData);
       setPreview(data.data ?? null);
@@ -95,6 +105,7 @@ export default function UploadPage() {
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
+      formData.append('stockMode', stockMode);
 
       const data = await api.upload<{
         createdCount: number; updatedCount: number; errorCount: number;
@@ -193,6 +204,61 @@ export default function UploadPage() {
                     exit={{ opacity: 0 }}
                     className="space-y-4"
                   >
+                    {preview.mergedRows > 0 && (
+                      <p className="text-xs text-lumine-warm-gray">
+                        {preview.totalRows} linhas na planilha viraram {preview.totalVariants} produtos
+                        ({preview.mergedRows} linha(s) repetida(s) tiveram a quantidade somada).
+                      </p>
+                    )}
+
+                    {/* Modo de estoque — só importa quando há produtos existentes */}
+                    {preview.toUpdate > 0 && (
+                      <div className="rounded-xl border border-lumine-lavender-pale bg-lumine-cream/50 p-4">
+                        <p className="text-sm font-medium text-lumine-sage-dark mb-1">
+                          {preview.toUpdate} produto(s) já existem. O que fazer com o estoque deles?
+                        </p>
+                        <p className="text-xs text-lumine-warm-gray mb-3">
+                          Produtos novos sempre entram com a quantidade da planilha.
+                        </p>
+                        <div className="grid sm:grid-cols-2 gap-3">
+                          <button
+                            type="button"
+                            onClick={() => { setStockMode('replace'); if (selectedFile) handleFile(selectedFile, 'replace'); }}
+                            className={`text-left rounded-xl border p-3 transition-all ${
+                              stockMode === 'replace'
+                                ? 'border-lumine-lavender bg-white shadow-sm ring-1 ring-lumine-lavender'
+                                : 'border-lumine-lavender-pale bg-white/60 hover:border-lumine-lavender'
+                            }`}
+                          >
+                            <span className="block text-sm font-medium text-lumine-charcoal">
+                              Substituir estoque
+                            </span>
+                            <span className="block text-xs text-lumine-warm-gray mt-0.5">
+                              O estoque passa a ser o valor da planilha. Use quando a planilha
+                              já é a contagem correta.
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setStockMode('add'); if (selectedFile) handleFile(selectedFile, 'add'); }}
+                            className={`text-left rounded-xl border p-3 transition-all ${
+                              stockMode === 'add'
+                                ? 'border-lumine-lavender bg-white shadow-sm ring-1 ring-lumine-lavender'
+                                : 'border-lumine-lavender-pale bg-white/60 hover:border-lumine-lavender'
+                            }`}
+                          >
+                            <span className="block text-sm font-medium text-lumine-charcoal">
+                              Somar ao estoque
+                            </span>
+                            <span className="block text-xs text-lumine-warm-gray mt-0.5">
+                              A quantidade é somada ao que já existe. Use ao dar entrada em
+                              mercadoria nova.
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Summary */}
                     <div className="grid grid-cols-3 gap-3">
                       <div className="bg-lumine-success/10 border border-lumine-success/20 rounded-xl p-3 text-center">
@@ -227,7 +293,7 @@ export default function UploadPage() {
                           <tr>
                             <th className="text-left px-4 py-2 text-xs font-medium text-lumine-sage-dark">SKU</th>
                             <th className="text-left px-4 py-2 text-xs font-medium text-lumine-sage-dark">Nome</th>
-                            <th className="text-center px-4 py-2 text-xs font-medium text-lumine-sage-dark">Qty</th>
+                            <th className="text-center px-4 py-2 text-xs font-medium text-lumine-sage-dark">Estoque</th>
                             <th className="text-right px-4 py-2 text-xs font-medium text-lumine-sage-dark">Preço</th>
                             <th className="text-center px-4 py-2 text-xs font-medium text-lumine-sage-dark">Ação</th>
                           </tr>
@@ -237,7 +303,22 @@ export default function UploadPage() {
                             <tr key={`${item.sku}-${item.row}`} className="border-t border-lumine-lavender-pale hover:bg-lumine-lavender-pale/20">
                               <td className="px-4 py-2 font-mono text-xs">{item.sku}</td>
                               <td className="px-4 py-2 truncate max-w-[150px]">{item.name}</td>
-                              <td className="px-4 py-2 text-center">{item.quantity}</td>
+                              <td className="px-4 py-2 text-center whitespace-nowrap">
+                                {item.action === 'update' && item.currentData ? (
+                                  <span>
+                                    <span className="text-lumine-warm-gray">{item.currentData.quantity}</span>
+                                    <span className="text-lumine-warm-gray mx-1">&rarr;</span>
+                                    <span className="font-medium text-lumine-charcoal">
+                                      {item.resultingQuantity ?? item.quantity}
+                                    </span>
+                                    {preview.stockMode === 'add' && (
+                                      <span className="text-lumine-success ml-1">(+{item.quantity})</span>
+                                    )}
+                                  </span>
+                                ) : (
+                                  item.quantity
+                                )}
+                              </td>
                               <td className="px-4 py-2 text-right">R$ {item.salePrice.toFixed(2)}</td>
                               <td className="px-4 py-2 text-center">
                                 <Badge variant={item.action === 'create' ? 'success' : 'warning'}>

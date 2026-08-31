@@ -56,9 +56,12 @@ lumine_saas/
 ### 3. Upload de Planilha (`/api/upload/*`)
 - **Flow crítico:**
   1. POST `/api/upload/preview` — recebe .xlsx/.csv, parseia, retorna preview
-  2. Para cada variante: se o SKU composto existe → atualiza qty/preço; se não → cria
-  3. POST `/api/upload/confirm` — aplica as mudanças
-  4. Registra tudo no model Import (contadores de criado/atualizado/erro)
+  2. Usuário escolhe o **modo de estoque** para os produtos que já existem:
+     `replace` (estoque vira o valor da planilha, padrão) ou `add` (soma ao atual).
+     Produtos novos sempre entram com a quantidade da planilha nos dois modos.
+  3. Para cada variante: se o SKU composto existe → atualiza qty/preço; se não → cria
+  4. POST `/api/upload/confirm` — aplica as mudanças
+  5. Registra tudo no model Import (contadores de criado/atualizado/erro)
 - Template de planilha disponível para download
 - Colunas obrigatórias: sku, nome, quantidade, preco_venda
 - Colunas opcionais: categoria, preco_custo, marca, tamanho, cor, publico, descricao_curta, descricao
