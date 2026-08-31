@@ -77,7 +77,10 @@ export function ProductFormDialog({ open, onOpenChange, product }: Props) {
     } else {
       reset({ status: 'ACTIVE', quantity: 0, minStock: 5, costPrice: 0 });
     }
-  }, [product, reset, open]);
+    // categories.length entra nas deps de propósito: as categorias chegam por
+    // fetch async e o <select> só tem o placeholder até elas renderizarem.
+    // Sem isso, o reset roda antes das <option> existirem e o valor não "pega".
+  }, [product, reset, open, categories.length]);
 
   const mutation = useMutation({
     mutationFn: (data: FormData) =>
