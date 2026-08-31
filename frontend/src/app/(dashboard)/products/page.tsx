@@ -27,6 +27,11 @@ const STATUS_BADGE: Record<string, 'success' | 'warning' | 'danger' | 'default'>
   DISCONTINUED: 'danger',
 };
 
+const AUDIENCE_LABELS: Record<string, string> = {
+  ADULTO: 'Adulto',
+  INFANTIL: 'Infantil',
+};
+
 const STATUS_LABELS: Record<string, string> = {
   ACTIVE: 'Ativo',
   INACTIVE: 'Inativo',
@@ -41,6 +46,7 @@ function ProductsPageContent() {
   const canManage = can('manage_products');
 
   const [search, setSearch] = useState('');
+  const [audience, setAudience] = useState('');
   const [page, setPage] = useState(1);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
@@ -58,10 +64,11 @@ function ProductsPageContent() {
   }, [searchParams]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['products', page, search],
+    queryKey: ['products', page, search, audience],
     queryFn: () => {
       const params = new URLSearchParams({ page: String(page), limit: '20' });
       if (search) params.set('search', search);
+      if (audience) params.set('audience', audience);
       return api.paginated<Product>(`/api/products?${params}`);
     },
     placeholderData: (prev) => prev,
@@ -136,6 +143,15 @@ function ProductsPageContent() {
           />
         </div>
         <div className="flex gap-2">
+          <select
+            value={audience}
+            onChange={(e) => { setAudience(e.target.value); setPage(1); }}
+            className="h-9 rounded-xl border border-lumine-lavender-pale bg-white px-3 text-sm text-lumine-charcoal focus:outline-none focus:ring-2 focus:ring-lumine-lavender"
+          >
+            <option value="">Todos os públicos</option>
+            <option value="ADULTO">Adulto</option>
+            <option value="INFANTIL">Infantil</option>
+          </select>
           <Button
             variant="outline"
             size="sm"
@@ -296,6 +312,9 @@ function ProductsPageContent() {
                       <Badge variant={STATUS_BADGE[product.status]}>
                         {STATUS_LABELS[product.status]}
                       </Badge>
+                      {product.audience && (
+                        <Badge variant="default">{AUDIENCE_LABELS[product.audience]}</Badge>
+                      )}
                       {product.quantity <= product.minStock && (
                         <AlertTriangle size={14} className="text-lumine-danger shrink-0" />
                       )}
@@ -304,7 +323,13 @@ function ProductsPageContent() {
                       {product.sku} · {product.category.name}
                       {product.size && ` · ${product.size}`}
                       {product.color && ` · ${product.color}`}
+                      {product.audience && ` · ${AUDIENCE_LABELS[product.audience]}`}
                     </p>
+                    {product.shortDescription && (
+                      <p className="text-xs text-lumine-warm-gray/80 mt-0.5 truncate italic">
+                        {product.shortDescription}
+                      </p>
+                    )}
                   </div>
 
                   {/* Stock */}

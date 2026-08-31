@@ -24,6 +24,9 @@ const schema = z.object({
   brand: z.string().optional(),
   size: z.string().optional(),
   color: z.string().optional(),
+  audience: z.enum(['ADULTO', 'INFANTIL']).optional().or(z.literal('')),
+  shortDescription: z.string().max(200, 'Máximo 200 caracteres').optional(),
+  description: z.string().max(2000, 'Máximo 2000 caracteres').optional(),
   barcode: z.string().optional(),
   status: z.enum(['ACTIVE', 'INACTIVE', 'DISCONTINUED']),
 });
@@ -71,6 +74,9 @@ export function ProductFormDialog({ open, onOpenChange, product }: Props) {
         brand: product.brand ?? '',
         size: product.size ?? '',
         color: product.color ?? '',
+        audience: product.audience ?? '',
+        shortDescription: product.shortDescription ?? '',
+        description: product.description ?? '',
         barcode: product.barcode ?? '',
         status: product.status,
       });
@@ -163,7 +169,7 @@ export function ProductFormDialog({ open, onOpenChange, product }: Props) {
             </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-5 gap-4">
             <div className="space-y-1.5">
               <Label>Est. Mínimo</Label>
               <Input {...register('minStock')} type="number" placeholder="5" />
@@ -180,6 +186,31 @@ export function ProductFormDialog({ open, onOpenChange, product }: Props) {
               <Label>Cor</Label>
               <Input {...register('color')} placeholder="Cor" />
             </div>
+            <div className="space-y-1.5">
+              <Label>Público</Label>
+              <select {...register('audience')} className="flex h-10 w-full rounded-xl border border-lumine-lavender-pale bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lumine-lavender">
+                <option value="">—</option>
+                <option value="ADULTO">Adulto</option>
+                <option value="INFANTIL">Infantil</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Descrição Curta</Label>
+            <Input {...register('shortDescription')} placeholder="Resumo em uma linha, aparece na listagem" />
+            {errors.shortDescription && <p className="text-xs text-lumine-danger">{errors.shortDescription.message}</p>}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Descrição</Label>
+            <textarea
+              {...register('description')}
+              rows={4}
+              placeholder="Descrição completa do produto: material, caimento, indicação de uso..."
+              className="flex w-full rounded-xl border border-lumine-lavender-pale bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lumine-lavender resize-y"
+            />
+            {errors.description && <p className="text-xs text-lumine-danger">{errors.description.message}</p>}
           </div>
 
           <div className="space-y-1.5">

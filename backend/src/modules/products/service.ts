@@ -5,7 +5,7 @@ import { createAuditLog } from '../../shared/utils/auditLog';
 import type { CreateProductInput, UpdateProductInput, BulkUpdateInput, ListProductsInput } from './validator';
 
 export async function listProducts(params: ListProductsInput) {
-  const { page, limit, search, categoryId, subcategoryId, status, lowStock, sortBy, sortOrder } = params;
+  const { page, limit, search, categoryId, subcategoryId, status, audience, lowStock, sortBy, sortOrder } = params;
   const skip = (page - 1) * limit;
 
   const baseWhere: Prisma.ProductWhereInput = {
@@ -13,6 +13,7 @@ export async function listProducts(params: ListProductsInput) {
     ...(status && { status }),
     ...(categoryId && { categoryId }),
     ...(subcategoryId && { subcategoryId }),
+    ...(audience && { audience }),
     ...(search && {
       OR: [
         { name: { contains: search, mode: 'insensitive' } },

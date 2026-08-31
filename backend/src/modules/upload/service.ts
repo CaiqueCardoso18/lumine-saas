@@ -2,10 +2,10 @@ import * as xlsx from 'xlsx';
 import { prisma } from '../../config/database';
 import { AppError } from '../../shared/errors/AppError';
 import { createAuditLog } from '../../shared/utils/auditLog';
-import { aggregateVariants, categoryKey, VariantRow } from './helpers';
+import { aggregateVariants, categoryKey, parseAudience, VariantRow } from './helpers';
 
 const REQUIRED_COLUMNS = ['sku', 'nome', 'quantidade', 'preco_venda'];
-const OPTIONAL_COLUMNS = ['preco_custo', 'categoria', 'marca', 'tamanho', 'cor', 'descricao', 'barcode'];
+const OPTIONAL_COLUMNS = ['preco_custo', 'categoria', 'marca', 'tamanho', 'cor', 'publico', 'descricao', 'descricao_curta', 'barcode'];
 
 interface RawRow {
   sku?: string;
@@ -17,7 +17,9 @@ interface RawRow {
   marca?: string;
   tamanho?: string;
   cor?: string;
+  publico?: string;
   descricao?: string;
+  descricao_curta?: string;
   barcode?: string;
   [key: string]: unknown;
 }
@@ -32,7 +34,9 @@ interface ParsedRow {
   brand?: string;
   size?: string;
   color?: string;
+  audience?: 'ADULTO' | 'INFANTIL';
   description?: string;
+  shortDescription?: string;
   barcode?: string;
 }
 
@@ -43,9 +47,10 @@ interface PreviewItem {
   quantity: number;
   salePrice: number;
   action: 'create' | 'update';
-  /** Tamanho/cor da variante, para o usuário conferir no preview */
+  /** Tamanho/cor/público da variante, para o usuário conferir no preview */
   size?: string;
   color?: string;
+  audience?: 'ADULTO' | 'INFANTIL';
   /** Quantas linhas da planilha foram somadas nesta variante (>1 = duplicatas) */
   mergedRows?: number;
   currentData?: {
@@ -88,7 +93,9 @@ function parseRow(raw: RawRow, rowIndex: number): { data?: ParsedRow; error?: st
       brand: raw.marca ? String(raw.marca).trim() : undefined,
       size: raw.tamanho ? String(raw.tamanho).trim() : undefined,
       color: raw.cor ? String(raw.cor).trim() : undefined,
+      audience: parseAudience(raw.publico),
       description: raw.descricao ? String(raw.descricao).trim() : undefined,
+      shortDescription: raw.descricao_curta ? String(raw.descricao_curta).trim().slice(0, 200) : undefined,
       barcode: raw.barcode ? String(raw.barcode).trim() : undefined,
     },
   };
@@ -144,6 +151,7 @@ export async function previewUpload(fileBuffer: Buffer, fileName: string) {
       salePrice: v.salePrice,
       size: v.size,
       color: v.color,
+      audience: v.audience,
       mergedRows: v.sourceRows.length > 1 ? v.sourceRows.length : undefined,
       action: existing ? ('update' as const) : ('create' as const),
       currentData: existing
@@ -238,6 +246,9 @@ export async function confirmUpload(fileBuffer: Buffer, fileName: string, userId
             ...(v.brand && { brand: v.brand }),
             ...(v.size && { size: v.size }),
             ...(v.color && { color: v.color }),
+            ...(v.audience && { audience: v.audience }),
+            ...(v.description && { description: v.description }),
+            ...(v.shortDescription && { shortDescription: v.shortDescription }),
           },
         });
         updatedCount++;
@@ -253,7 +264,9 @@ export async function confirmUpload(fileBuffer: Buffer, fileName: string, userId
             brand: v.brand,
             size: v.size,
             color: v.color,
+            audience: v.audience,
             description: v.description,
+            shortDescription: v.shortDescription,
             barcode: v.barcode,
           },
         });

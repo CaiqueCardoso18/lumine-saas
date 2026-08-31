@@ -79,12 +79,14 @@ model Product {
   id            String        @id @default(cuid())
   sku           String        @unique
   name          String
-  description   String?
+  description      String?    // descrição completa
+  shortDescription String?    @map("short_description") // resumo curto, para listagem e etiqueta
   categoryId    String        @map("category_id")
   subcategoryId String?       @map("subcategory_id")
   brand         String?
   size          String?
   color         String?
+  audience      Audience?     // Adulto / Infantil — opcional (acessórios não se aplicam)
   costPrice     Decimal       @map("cost_price") @db.Decimal(10, 2)
   salePrice     Decimal       @map("sale_price") @db.Decimal(10, 2)
   quantity      Int           @default(0)
@@ -109,7 +111,13 @@ model Product {
   @@index([categoryId])
   @@index([status])
   @@index([deletedAt])
+  @@index([audience])
   @@map("products")
+}
+
+enum Audience {
+  ADULTO
+  INFANTIL
 }
 
 // ============================================================

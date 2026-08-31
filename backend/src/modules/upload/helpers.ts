@@ -24,6 +24,30 @@ export function categoryKey(text: string): string {
   return normalize(text).replace(/s$/, '');
 }
 
+/**
+ * Interpreta a coluna "publico" da planilha.
+ * Aceita as variações que a loja costuma digitar e devolve o enum do banco.
+ * Qualquer coisa não reconhecida vira undefined (campo fica vazio).
+ */
+export function parseAudience(value?: string | number | null): 'ADULTO' | 'INFANTIL' | undefined {
+  if (value === null || value === undefined || value === '') return undefined;
+
+  const key = normalize(String(value));
+  if (!key) return undefined;
+
+  const adulto = ['adulto', 'adulta', 'adultos', 'adl', 'adt', 'a'];
+  const infantil = ['infantil', 'infanto', 'inf', 'crianca', 'criancas', 'kids', 'kid', 'baby', 'bebe', 'i'];
+
+  if (adulto.includes(key)) return 'ADULTO';
+  if (infantil.includes(key)) return 'INFANTIL';
+
+  // fallback por prefixo, pega "infantil feminino", "adulto unissex" etc
+  if (key.startsWith('adult')) return 'ADULTO';
+  if (key.startsWith('infan') || key.startsWith('crian') || key.startsWith('kid')) return 'INFANTIL';
+
+  return undefined;
+}
+
 /** Converte um pedaço do SKU composto: "Rosa EUA" -> "ROSAEUA" */
 function skuPart(text: string): string {
   return normalize(text)
@@ -54,7 +78,9 @@ export interface VariantRow {
   brand?: string;
   size?: string;
   color?: string;
+  audience?: 'ADULTO' | 'INFANTIL';
   description?: string;
+  shortDescription?: string;
   barcode?: string;
   /** Linhas da planilha que foram agrupadas nesta variante (1-indexed, com header) */
   sourceRows: number[];
@@ -78,7 +104,9 @@ export function aggregateVariants<
     brand?: string;
     size?: string;
     color?: string;
+    audience?: 'ADULTO' | 'INFANTIL';
     description?: string;
+    shortDescription?: string;
     barcode?: string;
   }
 >(rows: Array<{ data: T; rowNumber: number }>): VariantRow[] {
@@ -96,7 +124,9 @@ export function aggregateVariants<
       if (data.costPrice) existing.costPrice = data.costPrice;
       if (data.categoryName) existing.categoryName = data.categoryName;
       if (data.brand) existing.brand = data.brand;
+      if (data.audience) existing.audience = data.audience;
       if (data.description) existing.description = data.description;
+      if (data.shortDescription) existing.shortDescription = data.shortDescription;
       if (data.barcode) existing.barcode = data.barcode;
       existing.sourceRows.push(rowNumber);
     } else {
@@ -111,7 +141,9 @@ export function aggregateVariants<
         brand: data.brand,
         size: data.size,
         color: data.color,
+        audience: data.audience,
         description: data.description,
+        shortDescription: data.shortDescription,
         barcode: data.barcode,
         sourceRows: [rowNumber],
       });

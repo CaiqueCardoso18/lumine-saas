@@ -13,6 +13,7 @@ export interface User {
 
 // ─── Products ─────────────────────────────────────────────────
 export type ProductStatus = 'ACTIVE' | 'INACTIVE' | 'DISCONTINUED';
+export type Audience = 'ADULTO' | 'INFANTIL';
 
 export interface Category {
   id: string;
@@ -35,6 +36,7 @@ export interface Product {
   sku: string;
   name: string;
   description?: string;
+  shortDescription?: string;
   categoryId: string;
   category: Pick<Category, 'id' | 'name' | 'slug'>;
   subcategoryId?: string;
@@ -42,6 +44,7 @@ export interface Product {
   brand?: string;
   size?: string;
   color?: string;
+  audience?: Audience | null;
   costPrice: number;
   salePrice: number;
   quantity: number;

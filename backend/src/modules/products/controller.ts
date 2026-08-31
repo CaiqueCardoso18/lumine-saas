@@ -87,10 +87,18 @@ export async function downloadTemplate(_req: Request, res: Response, next: NextF
   try {
     const xlsx = await import('xlsx');
     const ws = xlsx.utils.aoa_to_sheet([
-      ['sku', 'nome', 'quantidade', 'preco_venda', 'preco_custo', 'categoria', 'marca', 'tamanho', 'cor'],
-      ['SKU-001', 'Collant Básico Preto', '10', '89.90', '35.00', 'Collants', 'Só Dança', 'P', 'Preto'],
-      ['SKU-002', 'Sapatilha Ballet Rosa', '5', '149.90', '60.00', 'Sapatilhas', 'Capezio', '34', 'Rosa'],
+      ['sku', 'nome', 'quantidade', 'preco_venda', 'preco_custo', 'categoria', 'marca', 'tamanho', 'cor', 'publico', 'descricao_curta', 'descricao'],
+      ['SKU-001', 'Collant Básico Preto', '10', '89.90', '35.00', 'Collants', 'Só Dança', 'P', 'Preto', 'Adulto', 'Collant de alcinha em helanca', 'Collant básico de alcinha, tecido helanca com ótimo caimento. Ideal para aulas de ballet clássico e jazz.'],
+      ['SKU-002', 'Sapatilha Ballet Rosa', '5', '149.90', '60.00', 'Sapatilhas', 'Capezio', '34', 'Rosa', 'Infantil', 'Sapatilha de meia ponta em couro', 'Sapatilha de meia ponta em couro legítimo, sola dividida, com elástico já costurado.'],
+      ['SKU-002', 'Sapatilha Ballet Rosa', '8', '149.90', '60.00', 'Sapatilhas', 'Capezio', '36', 'Rosa', 'Adulto', 'Sapatilha de meia ponta em couro', 'Sapatilha de meia ponta em couro legítimo, sola dividida, com elástico já costurado.'],
     ]);
+
+    // Larguras de coluna para a planilha abrir legível
+    ws['!cols'] = [
+      { wch: 12 }, { wch: 28 }, { wch: 11 }, { wch: 12 }, { wch: 12 },
+      { wch: 16 }, { wch: 14 }, { wch: 9 }, { wch: 12 }, { wch: 10 },
+      { wch: 36 }, { wch: 55 },
+    ];
 
     const wb = xlsx.utils.book_new();
     xlsx.utils.book_append_sheet(wb, ws, 'Produtos');

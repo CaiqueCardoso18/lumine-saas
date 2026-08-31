@@ -3,12 +3,19 @@ import { z } from 'zod';
 export const createProductSchema = z.object({
   sku: z.string().min(1).max(50).trim(),
   name: z.string().min(1).max(200).trim(),
-  description: z.string().max(1000).optional(),
+  description: z.string().max(2000).optional(),
+  shortDescription: z.string().max(200, 'Descrição curta: máximo 200 caracteres').optional(),
   categoryId: z.string().cuid('categoryId inválido'),
   subcategoryId: z.string().cuid().optional(),
   brand: z.string().max(100).optional(),
   size: z.string().max(50).optional(),
   color: z.string().max(50).optional(),
+  // O <select> do form manda '' quando nada é escolhido; converte para undefined
+  // para o Prisma não receber string vazia num campo de enum.
+  audience: z
+    .enum(['ADULTO', 'INFANTIL'])
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
   costPrice: z.coerce.number().min(0, 'Preço de custo não pode ser negativo'),
   salePrice: z.coerce.number().min(0.01, 'Preço de venda deve ser maior que zero'),
   quantity: z.coerce.number().int().min(0).default(0),
@@ -28,6 +35,7 @@ export const bulkUpdateSchema = z.object({
     quantity: z.coerce.number().int().min(0).optional(),
     minStock: z.coerce.number().int().min(0).optional(),
     status: z.enum(['ACTIVE', 'INACTIVE', 'DISCONTINUED']).optional(),
+    audience: z.enum(['ADULTO', 'INFANTIL']).optional(),
   }).refine(
     (data) => Object.values(data).some((v) => v !== undefined),
     { message: 'Informe ao menos um campo para atualizar' }
@@ -41,6 +49,7 @@ export const listProductsSchema = z.object({
   categoryId: z.string().optional(),
   subcategoryId: z.string().optional(),
   status: z.enum(['ACTIVE', 'INACTIVE', 'DISCONTINUED']).optional(),
+  audience: z.enum(['ADULTO', 'INFANTIL']).optional(),
   lowStock: z.coerce.boolean().optional(),
   sortBy: z.enum(['name', 'sku', 'salePrice', 'quantity', 'createdAt']).default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),

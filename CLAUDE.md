@@ -46,8 +46,8 @@ lumine_saas/
 
 ### 2. Produtos & Inventário (`/api/products/*`)
 - CRUD completo com soft delete (`deletedAt`)
-- Campos: sku (único), nome, categoria, subcategoria, marca, tamanho, cor, preço de custo, preço de venda, quantidade, estoque mínimo, imagem, status, barcode
-- Filtros: categoria, status, busca por nome/SKU
+- Campos: sku (único), nome, descrição, descrição curta (máx 200), categoria, subcategoria, marca, tamanho, cor, público (ADULTO/INFANTIL, opcional), preço de custo, preço de venda, quantidade, estoque mínimo, imagem, status, barcode
+- Filtros: categoria, status, público, busca por nome/SKU
 - Paginação server-side
 - Edição em massa (PATCH `/api/products/bulk`) — alterar preço/estoque de múltiplos produtos
 - Histórico de alterações via AuditLog
@@ -56,12 +56,18 @@ lumine_saas/
 ### 3. Upload de Planilha (`/api/upload/*`)
 - **Flow crítico:**
   1. POST `/api/upload/preview` — recebe .xlsx/.csv, parseia, retorna preview
-  2. Para cada linha: se SKU existe → atualiza qty/preço; se não existe → cria produto
+  2. Para cada variante: se o SKU composto existe → atualiza qty/preço; se não → cria
   3. POST `/api/upload/confirm` — aplica as mudanças
   4. Registra tudo no model Import (contadores de criado/atualizado/erro)
 - Template de planilha disponível para download
 - Colunas obrigatórias: sku, nome, quantidade, preco_venda
-- Colunas opcionais: categoria, preco_custo, marca, tamanho, cor
+- Colunas opcionais: categoria, preco_custo, marca, tamanho, cor, publico, descricao_curta, descricao
+- **SKU composto por variante:** o SKU da planilha identifica o MODELO; tamanho e
+  cor variam entre linhas. O import agrupa por (sku, tamanho, cor) e gera SKU
+  composto (`400-38-ROSAEUA`). Linhas repetidas da mesma variante somam quantidade.
+- **Público** (`publico`) aceita variações (Adulto/adt/Infantil/kids/criança) e é
+  apenas informativo — NÃO entra no SKU composto.
+- **Categoria** casa ignorando acento/caixa/plural; se não existir, é criada.
 
 ### 4. Vendas / PDV (`/api/sales/*`)
 - Registro de venda com múltiplos itens (carrinho)
