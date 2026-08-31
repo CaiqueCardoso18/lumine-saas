@@ -176,7 +176,21 @@ export default function UploadPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => window.open(`${process.env.NEXT_PUBLIC_API_URL}/api/products/template`, '_blank')}
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/products/template`);
+                      const blob = await res.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'template-produtos-lumine.xlsx';
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } catch {
+                      // fallback
+                      window.open(`${process.env.NEXT_PUBLIC_API_URL}/api/products/template`, '_blank');
+                    }
+                  }}
                 >
                   <Download size={14} className="mr-2" />
                   Baixar Template

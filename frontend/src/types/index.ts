@@ -166,6 +166,53 @@ export interface Insight {
   metadata?: Record<string, unknown>;
 }
 
+// ─── Inventory ───────────────────────────────────────────────
+export type InventorySessionStatus = 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type MovementType = 'ADJUSTMENT' | 'LOSS' | 'DAMAGE' | 'RETURN' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'INVENTORY_ADJUSTMENT' | 'OTHER';
+
+export interface InventoryCount {
+  id: string;
+  sessionId: string;
+  productId: string;
+  product: Pick<Product, 'id' | 'sku' | 'name' | 'quantity'> & { category: { name: string } };
+  systemQuantity: number;
+  countedQuantity: number;
+  difference: number;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface InventorySession {
+  id: string;
+  name: string;
+  userId: string;
+  user: Pick<User, 'id' | 'name'>;
+  status: InventorySessionStatus;
+  notes?: string;
+  totalProducts: number;
+  matchedCount: number;
+  divergedCount: number;
+  appliedAt?: string;
+  createdAt: string;
+  counts?: InventoryCount[];
+  _count?: { counts: number };
+}
+
+export interface StockMovement {
+  id: string;
+  productId: string;
+  product: Pick<Product, 'id' | 'sku' | 'name'>;
+  userId: string;
+  user: Pick<User, 'id' | 'name'>;
+  type: MovementType;
+  quantity: number;
+  previousStock: number;
+  newStock: number;
+  reason: string;
+  reference?: string;
+  createdAt: string;
+}
+
 // ─── API ──────────────────────────────────────────────────────
 export interface ApiResponse<T> {
   success: boolean;

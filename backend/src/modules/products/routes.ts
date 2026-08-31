@@ -10,9 +10,10 @@ import {
 
 const router = Router();
 
-router.use(authenticate);
-
+// Template é público — não precisa de auth (window.open não envia cookie cross-origin)
 router.get('/template', downloadTemplate);
+
+router.use(authenticate);
 router.get('/low-stock', lowStock);
 router.get('/', validate(listProductsSchema, 'query'), index);
 router.get('/:id', show);

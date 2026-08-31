@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Package, ShoppingCart, TrendingUp, Lightbulb,
-  Upload, Settings, ChevronLeft, ChevronRight, ClipboardList, X,
+  Upload, Settings, ChevronLeft, ChevronRight, ClipboardList, X, Warehouse,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermission } from '@/hooks/usePermission';
@@ -19,6 +19,7 @@ const navItems = [
   { href: '/orders',     icon: ClipboardList,    label: 'Pedidos'      },
   { href: '/analytics',  icon: TrendingUp,       label: 'Analytics'    },
   { href: '/insights',   icon: Lightbulb,        label: 'Insights'     },
+  { href: '/inventory',  icon: Warehouse,        label: 'Inventário'   },
   { href: '/upload',     icon: Upload,           label: 'Importar'     },
   { href: '/settings',   icon: Settings,         label: 'Configurações'},
 ];

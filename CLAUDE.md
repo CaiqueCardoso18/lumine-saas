@@ -79,7 +79,21 @@ lumine_saas/
 - Ao marcar CHECKED, estoque atualizado automaticamente
 - Model Supplier para cadastro de fornecedores
 
-### 6. Analytics (`/api/analytics/*`)
+### 6. Inventário (`/api/inventory/*`)
+- **Sessões de Contagem Física:**
+  - CRUD de sessões (IN_PROGRESS → COMPLETED | CANCELLED)
+  - Contagem de produtos com diff automático (systemQuantity vs countedQuantity)
+  - Batch upsert de contagens (@@unique sessionId+productId)
+  - Aplicar sessão: transação atômica que ajusta estoque, cria StockMovement e AuditLog para cada divergência
+- **Movimentações Manuais de Estoque:**
+  - Tipos: ADJUSTMENT, LOSS, DAMAGE, RETURN, TRANSFER_IN, TRANSFER_OUT, INVENTORY_ADJUSTMENT, OTHER
+  - Validação contra estoque negativo
+  - Registro atômico: atualiza produto + cria AuditLog na mesma transação
+  - Histórico por produto e por tipo
+- Models: InventorySession, InventoryCount, StockMovement
+- Frontend: página /inventory com tabs (Sessões de Contagem + Movimentações)
+
+### 7. Analytics (`/api/analytics/*`)
 - Faturamento por período (dia/semana/mês/ano/custom)
 - Top produtos e categorias por vendas
 - Margem de lucro por produto/categoria
@@ -88,7 +102,7 @@ lumine_saas/
 - Giro de estoque
 - Queries otimizadas com índices no PostgreSQL
 
-### 7. Insights (`/api/insights/*`)
+### 8. Insights (`/api/insights/*`)
 - Fase 1 — regras simples (sem IA):
   - Produto sem venda há X dias → sugerir promoção
   - Previsão de esgotamento baseado em ritmo de vendas
@@ -96,7 +110,7 @@ lumine_saas/
   - Melhor dia/horário de vendas
   - Combos frequentes (produtos vendidos juntos)
 
-### 8. Configurações (`/api/settings/*`)
+### 9. Configurações (`/api/settings/*`)
 - Perfil da loja (nome, logo, endereço)
 - CRUD de categorias e subcategorias
 - Estoque mínimo padrão

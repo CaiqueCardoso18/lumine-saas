@@ -28,8 +28,10 @@ model User {
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  sales        Sale[]
-  auditLogs    AuditLog[]
+  sales              Sale[]
+  auditLogs          AuditLog[]
+  inventorySessions  InventorySession[]
+  stockMovements     StockMovement[]
 
   @@map("users")
 }
@@ -96,9 +98,11 @@ model Product {
 
   category      Category      @relation(fields: [categoryId], references: [id])
   subcategory   Subcategory?  @relation(fields: [subcategoryId], references: [id])
-  saleItems     SaleItem[]
-  orderItems    OrderItem[]
-  auditLogs     AuditLog[]
+  saleItems        SaleItem[]
+  orderItems       OrderItem[]
+  auditLogs        AuditLog[]
+  inventoryCounts  InventoryCount[]
+  stockMovements   StockMovement[]
 
   @@index([sku])
   @@index([name])
@@ -247,6 +251,86 @@ model OrderItem {
 }
 
 // ============================================================
+// INVENTORY (Contagem Física + Movimentações de Estoque)
+// ============================================================
+
+enum InventorySessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model InventorySession {
+  id            String                 @id @default(cuid())
+  name          String                 // ex: "Inventário Mensal Abril 2026"
+  userId        String                 @map("user_id")
+  status        InventorySessionStatus @default(IN_PROGRESS)
+  notes         String?
+  totalProducts Int                    @default(0) @map("total_products")
+  matchedCount  Int                    @default(0) @map("matched_count")   // contagens que bateram
+  divergedCount Int                    @default(0) @map("diverged_count")  // contagens com divergência
+  appliedAt     DateTime?              @map("applied_at")                  // quando os ajustes foram aplicados
+  createdAt     DateTime               @default(now()) @map("created_at")
+  updatedAt     DateTime               @updatedAt @map("updated_at")
+
+  user          User                   @relation(fields: [userId], references: [id])
+  counts        InventoryCount[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("inventory_sessions")
+}
+
+model InventoryCount {
+  id               String           @id @default(cuid())
+  sessionId        String           @map("session_id")
+  productId        String           @map("product_id")
+  systemQuantity   Int              @map("system_quantity")   // qty no sistema no momento da contagem
+  countedQuantity  Int              @map("counted_quantity")  // qty contada fisicamente
+  difference       Int              @default(0)               // counted - system (calculado)
+  notes            String?
+  createdAt        DateTime         @default(now()) @map("created_at")
+
+  session          InventorySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  product          Product          @relation(fields: [productId], references: [id])
+
+  @@unique([sessionId, productId])
+  @@map("inventory_counts")
+}
+
+enum MovementType {
+  ADJUSTMENT      // ajuste manual genérico
+  LOSS            // perda / avaria
+  DAMAGE          // dano
+  RETURN          // devolução de cliente (não via venda)
+  TRANSFER_IN     // entrada por transferência
+  TRANSFER_OUT    // saída por transferência
+  INVENTORY_ADJUSTMENT  // ajuste vindo de sessão de inventário
+  OTHER
+}
+
+model StockMovement {
+  id            String       @id @default(cuid())
+  productId     String       @map("product_id")
+  userId        String       @map("user_id")
+  type          MovementType
+  quantity      Int          // positivo = entrada, negativo = saída
+  previousStock Int          @map("previous_stock")
+  newStock      Int          @map("new_stock")
+  reason        String       // motivo obrigatório
+  reference     String?      // referência livre (ex: "Sessão Inventário #xyz", "NF 1234")
+  createdAt     DateTime     @default(now()) @map("created_at")
+
+  product       Product      @relation(fields: [productId], references: [id])
+  user          User         @relation(fields: [userId], references: [id])
+
+  @@index([productId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("stock_movements")
+}
+
+// ============================================================
 // UPLOAD / IMPORT
 // ============================================================
 
@@ -288,6 +372,8 @@ enum AuditAction {
   SALE
   SALE_CANCEL
   ORDER_STATUS_CHANGE
+  INVENTORY_ADJUST
+  STOCK_MOVEMENT
 }
 
 model AuditLog {
