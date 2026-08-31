@@ -18,7 +18,10 @@ export function useInventorySessions(params?: Record<string, string>) {
 export function useInventorySession(id: string) {
   return useQuery({
     queryKey: ['inventory-sessions', id],
-    queryFn: () => api.get<InventorySession>(`/api/inventory/sessions/${id}`),
+    queryFn: async () => {
+      const res = await api.get<InventorySession>(`/api/inventory/sessions/${id}`);
+      return res.data;
+    },
     enabled: !!id,
   });
 }
@@ -113,7 +116,10 @@ export function useCreateMovement() {
 export function useProductMovements(productId: string) {
   return useQuery({
     queryKey: ['stock-movements', 'product', productId],
-    queryFn: () => api.get<StockMovement[]>(`/api/inventory/movements/product/${productId}`),
+    queryFn: async () => {
+      const res = await api.get<StockMovement[]>(`/api/inventory/movements/product/${productId}`);
+      return res.data ?? [];
+    },
     enabled: !!productId,
   });
 }

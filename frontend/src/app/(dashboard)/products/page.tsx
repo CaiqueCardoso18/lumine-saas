@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/formatters';
+import { downloadTemplate } from '@/lib/downloadTemplate';
 import { Product } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { ProductFormDialog } from '@/components/products/ProductFormDialog';
@@ -138,20 +139,7 @@ function ProductsPageContent() {
           <Button
             variant="outline"
             size="sm"
-            onClick={async () => {
-                    try {
-                      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'}/api/products/template`);
-                      const blob = await res.blob();
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = 'template-produtos-lumine.xlsx';
-                      a.click();
-                      URL.revokeObjectURL(url);
-                    } catch {
-                      window.open(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'}/api/products/template`, '_blank');
-                    }
-                  }}
+            onClick={downloadTemplate}
           >
             <Download size={14} className="mr-2" />
             Template

@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/formatters';
+import { downloadTemplate } from '@/lib/downloadTemplate';
 import { toast } from '@/hooks/use-toast';
 import { PermissionGuard } from '@/components/layout/PermissionGuard';
 
@@ -176,21 +177,7 @@ export default function UploadPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={async () => {
-                    try {
-                      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/products/template`);
-                      const blob = await res.blob();
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = 'template-produtos-lumine.xlsx';
-                      a.click();
-                      URL.revokeObjectURL(url);
-                    } catch {
-                      // fallback
-                      window.open(`${process.env.NEXT_PUBLIC_API_URL}/api/products/template`, '_blank');
-                    }
-                  }}
+                  onClick={downloadTemplate}
                 >
                   <Download size={14} className="mr-2" />
                   Baixar Template
