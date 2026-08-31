@@ -2,6 +2,7 @@ import * as xlsx from 'xlsx';
 import { prisma } from '../../config/database';
 import { AppError } from '../../shared/errors/AppError';
 import { createAuditLog } from '../../shared/utils/auditLog';
+import { aggregateVariants, categoryKey, VariantRow } from './helpers';
 
 const REQUIRED_COLUMNS = ['sku', 'nome', 'quantidade', 'preco_venda'];
 const OPTIONAL_COLUMNS = ['preco_custo', 'categoria', 'marca', 'tamanho', 'cor', 'descricao', 'barcode'];
@@ -42,6 +43,11 @@ interface PreviewItem {
   quantity: number;
   salePrice: number;
   action: 'create' | 'update';
+  /** Tamanho/cor da variante, para o usuário conferir no preview */
+  size?: string;
+  color?: string;
+  /** Quantas linhas da planilha foram somadas nesta variante (>1 = duplicatas) */
+  mergedRows?: number;
   currentData?: {
     name: string;
     quantity: number;
@@ -104,15 +110,8 @@ export async function previewUpload(fileBuffer: Buffer, fileName: string) {
     throw new AppError(`Colunas obrigatórias ausentes: ${missingColumns.join(', ')}`);
   }
 
-  // Buscar todos os SKUs existentes
-  const skusInFile = rows.map((r) => String(r.sku || '').trim()).filter(Boolean);
-  const existingProducts = await prisma.product.findMany({
-    where: { sku: { in: skusInFile }, deletedAt: null },
-    select: { id: true, sku: true, name: true, quantity: true, salePrice: true },
-  });
-  const existingMap = new Map(existingProducts.map((p) => [p.sku, p]));
-
-  const preview: PreviewItem[] = [];
+  // Parse de todas as linhas
+  const parsed: Array<{ data: ParsedRow; rowNumber: number }> = [];
   const errors: string[] = [];
 
   for (let i = 0; i < rows.length; i++) {
@@ -121,24 +120,45 @@ export async function previewUpload(fileBuffer: Buffer, fileName: string) {
       errors.push(error);
       continue;
     }
+    parsed.push({ data: data!, rowNumber: i + 2 });
+  }
 
-    const existing = existingMap.get(data!.sku);
-    preview.push({
-      row: i + 2,
-      sku: data!.sku,
-      name: data!.name,
-      quantity: data!.quantity,
-      salePrice: data!.salePrice,
-      action: existing ? 'update' : 'create',
+  // Agrupa por variante (sku + tamanho + cor), somando duplicatas
+  const variants = aggregateVariants(parsed);
+
+  // Busca os produtos existentes pelo SKU COMPOSTO
+  const variantSkus = variants.map((v) => v.variantSku);
+  const existingProducts = await prisma.product.findMany({
+    where: { sku: { in: variantSkus }, deletedAt: null },
+    select: { id: true, sku: true, name: true, quantity: true, salePrice: true },
+  });
+  const existingMap = new Map(existingProducts.map((p) => [p.sku, p]));
+
+  const preview: PreviewItem[] = variants.map((v) => {
+    const existing = existingMap.get(v.variantSku);
+    return {
+      row: v.sourceRows[0],
+      sku: v.variantSku,
+      name: v.name,
+      quantity: v.quantity,
+      salePrice: v.salePrice,
+      size: v.size,
+      color: v.color,
+      mergedRows: v.sourceRows.length > 1 ? v.sourceRows.length : undefined,
+      action: existing ? ('update' as const) : ('create' as const),
       currentData: existing
         ? { name: existing.name, quantity: existing.quantity, salePrice: Number(existing.salePrice) }
         : null,
-    });
-  }
+    };
+  });
 
   return {
     fileName,
     totalRows: rows.length,
+    /** Nº de variantes distintas depois do agrupamento */
+    totalVariants: variants.length,
+    /** Nº de linhas que foram somadas em variantes repetidas */
+    mergedRows: variants.reduce((acc, v) => acc + (v.sourceRows.length - 1), 0),
     toCreate: preview.filter((p) => p.action === 'create').length,
     toUpdate: preview.filter((p) => p.action === 'update').length,
     errorCount: errors.length,
@@ -152,21 +172,33 @@ export async function confirmUpload(fileBuffer: Buffer, fileName: string, userId
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows = xlsx.utils.sheet_to_json<RawRow>(sheet, { defval: '' });
 
-  // Buscar categoria padrão
+  // Categoria padrão (usada só quando a planilha não informa categoria)
   const defaultCategory = await prisma.category.findFirst({ orderBy: { sortOrder: 'asc' } });
   if (!defaultCategory) throw new AppError('Nenhuma categoria cadastrada. Execute o seed primeiro.');
 
+  // Índice de categorias por chave normalizada (sem acento, caixa baixa, singular)
   const allCategories = await prisma.category.findMany();
-  const categoryMap = new Map(allCategories.map((c) => [c.name.toLowerCase(), c]));
+  const categoryMap = new Map(allCategories.map((c) => [categoryKey(c.name), c.id]));
 
-  const skusInFile = rows.map((r) => String(r.sku || '').trim()).filter(Boolean);
-  const existingProducts = await prisma.product.findMany({
-    where: { sku: { in: skusInFile }, deletedAt: null },
-  });
-  const existingMap = new Map(existingProducts.map((p) => [p.sku, p]));
+  /** Acha a categoria por nome flexível; se não existir, cria. */
+  async function resolveCategoryId(name?: string): Promise<string> {
+    if (!name) return defaultCategory!.id;
 
-  let createdCount = 0;
-  let updatedCount = 0;
+    const key = categoryKey(name);
+    const found = categoryMap.get(key);
+    if (found) return found;
+
+    // Não existe: cria a categoria com o nome da planilha
+    const slug = key.replace(/\s+/g, '-');
+    const created = await prisma.category.create({
+      data: { name: name.trim(), slug, sortOrder: 999 },
+    });
+    categoryMap.set(key, created.id);
+    return created.id;
+  }
+
+  // Parse + agrupamento por variante (mesma lógica do preview)
+  const parsed: Array<{ data: ParsedRow; rowNumber: number }> = [];
   const errors: string[] = [];
 
   for (let i = 0; i < rows.length; i++) {
@@ -175,45 +207,63 @@ export async function confirmUpload(fileBuffer: Buffer, fileName: string, userId
       errors.push(error);
       continue;
     }
+    parsed.push({ data: data!, rowNumber: i + 2 });
+  }
 
+  const variants: VariantRow[] = aggregateVariants(parsed);
+
+  // Produtos já existentes, pelo SKU composto
+  const existingProducts = await prisma.product.findMany({
+    where: { sku: { in: variants.map((v) => v.variantSku) }, deletedAt: null },
+  });
+  const existingMap = new Map(existingProducts.map((p) => [p.sku, p]));
+
+  let createdCount = 0;
+  let updatedCount = 0;
+
+  for (const v of variants) {
     try {
-      const categoryId = data!.categoryName
-        ? (categoryMap.get(data!.categoryName.toLowerCase())?.id ?? defaultCategory.id)
-        : defaultCategory.id;
-
-      const existing = existingMap.get(data!.sku);
+      const categoryId = await resolveCategoryId(v.categoryName);
+      const existing = existingMap.get(v.variantSku);
 
       if (existing) {
         await prisma.product.update({
           where: { id: existing.id },
           data: {
-            quantity: data!.quantity,
-            salePrice: data!.salePrice,
-            ...(data!.costPrice && { costPrice: data!.costPrice }),
-            name: data!.name,
+            quantity: v.quantity,
+            salePrice: v.salePrice,
+            ...(v.costPrice && { costPrice: v.costPrice }),
+            name: v.name,
+            categoryId,
+            ...(v.brand && { brand: v.brand }),
+            ...(v.size && { size: v.size }),
+            ...(v.color && { color: v.color }),
           },
         });
         updatedCount++;
       } else {
         await prisma.product.create({
           data: {
-            sku: data!.sku,
-            name: data!.name,
-            quantity: data!.quantity,
-            salePrice: data!.salePrice,
-            costPrice: data!.costPrice ?? 0,
+            sku: v.variantSku,
+            name: v.name,
+            quantity: v.quantity,
+            salePrice: v.salePrice,
+            costPrice: v.costPrice ?? 0,
             categoryId,
-            brand: data!.brand,
-            size: data!.size,
-            color: data!.color,
-            description: data!.description,
-            barcode: data!.barcode,
+            brand: v.brand,
+            size: v.size,
+            color: v.color,
+            description: v.description,
+            barcode: v.barcode,
           },
         });
         createdCount++;
       }
     } catch (err) {
-      errors.push(`Linha ${i + 2}: Erro ao processar SKU ${data!.sku}`);
+      const detalhe = err instanceof Error ? err.message : 'erro desconhecido';
+      errors.push(
+        `Linha(s) ${v.sourceRows.join(', ')} — SKU ${v.variantSku}: ${detalhe}`
+      );
     }
   }
 
@@ -225,7 +275,7 @@ export async function confirmUpload(fileBuffer: Buffer, fileName: string, userId
       createdCount,
       updatedCount,
       errorCount: errors.length,
-      status: errors.length === rows.length ? 'FAILED' : 'COMPLETED',
+      status: createdCount === 0 && updatedCount === 0 ? 'FAILED' : 'COMPLETED',
       errors: errors.length > 0 ? errors : undefined,
       completedAt: new Date(),
     },
@@ -245,6 +295,8 @@ export async function confirmUpload(fileBuffer: Buffer, fileName: string, userId
     createdCount,
     updatedCount,
     errorCount: errors.length,
+    totalVariants: variants.length,
+    mergedRows: variants.reduce((acc, v) => acc + (v.sourceRows.length - 1), 0),
     errors,
   };
 }
