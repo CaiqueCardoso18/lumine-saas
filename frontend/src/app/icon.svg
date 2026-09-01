@@ -1,0 +1,22 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lumine">
+  <!-- Favicon Lumine: bailarina em quinta posição, braços abertos para cima.
+       Silhueta cheia e simétrica porque em 16px qualquer detalhe fino desaparece. -->
+  <circle cx="32" cy="32" r="32" fill="#B8A9C9"/>
+
+  <!-- Braços e pernas: traços com ponta arredondada -->
+  <g fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-width="3.2">
+    <path d="M29 27.5 C24.5 23 21.5 17.5 22.5 12"/>
+    <path d="M35 27.5 C39.5 23 42.5 17.5 41.5 12"/>
+    <path d="M32 23.5 L32 34.5"/>
+  </g>
+
+  <!-- Cabeça -->
+  <circle cx="32" cy="19" r="4.2" fill="#FFFFFF"/>
+
+  <!-- Tutu -->
+  <path d="M17.5 36 C22 30.8 42 30.8 46.5 36 C41.5 40.4 22.5 40.4 17.5 36 Z" fill="#FFFFFF"/>
+
+  <!-- Pernas juntas terminando na ponta -->
+  <path d="M32 38 L31.2 50.5" fill="none" stroke="#FFFFFF" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M31.2 50.5 L30.8 54.5" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+</svg>
