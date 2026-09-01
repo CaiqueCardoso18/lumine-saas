@@ -3,7 +3,7 @@ import { Providers } from './providers';
 import '@/styles/globals.css';
 
 export const metadata: Metadata = {
-  title: 'Lumine.io',
+  title: 'Lumine — Sistema de Gestão',
   description: 'Sistema de gestão completo para a Lumine',
   // O favicon vem de src/app/icon.svg e src/app/apple-icon.png, que o
   // App Router detecta pelo nome do arquivo — não precisa declarar aqui.

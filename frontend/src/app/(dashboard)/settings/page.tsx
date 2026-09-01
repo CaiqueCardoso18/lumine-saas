@@ -21,12 +21,19 @@ const TABS = [
   { id: 'users', label: 'Usuários', icon: Users },
 ];
 
+/**
+ * Espelha PERMISSIONS em backend/src/middleware/requirePermission.ts.
+ * Alterar preço na venda NÃO é permissão: é restrito ao OWNER pelo role.
+ */
 const ALL_PERMISSIONS = [
   { key: 'view_orders', label: 'Ver Pedidos de Reposição', description: 'Acesso à aba de pedidos' },
-  { key: 'view_cost_price', label: 'Ver Preço de Custo', description: 'Visualizar custo dos produtos' },
+  { key: 'view_cost_price', label: 'Ver Preço de Custo', description: 'Visualizar custo e margem dos produtos' },
   { key: 'manage_products', label: 'Gerenciar Produtos', description: 'Criar, editar e excluir produtos' },
   { key: 'view_analytics', label: 'Ver Analytics', description: 'Acesso ao dashboard de análises' },
   { key: 'upload', label: 'Importar Planilhas', description: 'Upload em massa de produtos' },
+  { key: 'manage_inventory', label: 'Inventário', description: 'Contagens físicas e movimentações de estoque' },
+  { key: 'cancel_sale', label: 'Cancelar Venda', description: 'Estornar venda — devolve o estoque' },
+  { key: 'view_audit', label: 'Ver Auditoria', description: 'Histórico de tudo que foi alterado' },
 ];
 
 interface UserWithPermissions extends User {

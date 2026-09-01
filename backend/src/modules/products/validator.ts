@@ -27,15 +27,38 @@ export const createProductSchema = z.object({
 
 export const updateProductSchema = createProductSchema.partial();
 
+/**
+ * Edição em massa.
+ *
+ * Todo campo é opcional: só o que vier no payload é alterado, o resto fica
+ * como está. Campos de texto aceitam string vazia como "limpar o valor" —
+ * daí o transform para null, que é o que o Prisma espera para apagar.
+ */
+const clearableText = (max: number) =>
+  z.string().max(max).optional().transform((v) => (v === '' ? null : v));
+
 export const bulkUpdateSchema = z.object({
   productIds: z.array(z.string().cuid()).min(1, 'Selecione ao menos um produto'),
   updates: z.object({
+    // Preços e estoque
     salePrice: z.coerce.number().min(0).optional(),
     costPrice: z.coerce.number().min(0).optional(),
     quantity: z.coerce.number().int().min(0).optional(),
     minStock: z.coerce.number().int().min(0).optional(),
+    // Classificação
+    categoryId: z.string().cuid('categoryId inválido').optional(),
+    subcategoryId: z.string().cuid().optional().or(z.literal('').transform(() => null)),
     status: z.enum(['ACTIVE', 'INACTIVE', 'DISCONTINUED']).optional(),
-    audience: z.enum(['ADULTO', 'INFANTIL']).optional(),
+    audience: z
+      .enum(['ADULTO', 'INFANTIL'])
+      .optional()
+      .or(z.literal('').transform(() => null)),
+    // Atributos de texto
+    brand: clearableText(100),
+    size: clearableText(50),
+    color: clearableText(50),
+    shortDescription: clearableText(200),
+    description: clearableText(2000),
   }).refine(
     (data) => Object.values(data).some((v) => v !== undefined),
     { message: 'Informe ao menos um campo para atualizar' }

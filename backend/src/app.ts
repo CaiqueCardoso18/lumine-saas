@@ -17,6 +17,7 @@ import analyticsRoutes from './modules/analytics/routes';
 import insightsRoutes from './modules/insights/routes';
 import settingsRoutes from './modules/settings/routes';
 import inventoryRoutes from './modules/inventory/routes';
+import auditRoutes from './modules/audit/routes';
 
 const app = express();
 
@@ -69,6 +70,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/insights', insightsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/inventory', inventoryRoutes);
+app.use('/api/audit', auditRoutes);
 
 // ─── 404 ──────────────────────────────────────────────────────
 app.use((_req, res) => {

@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { UserRole } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError, NotFoundError } from '../../shared/errors/AppError';
 import { createAuditLog } from '../../shared/utils/auditLog';
@@ -87,7 +88,11 @@ export async function getSalesSummary(startDate?: string, endDate?: string) {
   };
 }
 
-export async function createSale(input: CreateSaleInput, userId: string) {
+export async function createSale(
+  input: CreateSaleInput,
+  userId: string,
+  userRole: UserRole = 'EMPLOYEE'
+) {
   // Buscar produtos e validar estoque
   const productIds = input.items.map((i) => i.productId);
   const products = await prisma.product.findMany({
@@ -109,6 +114,42 @@ export async function createSale(input: CreateSaleInput, userId: string) {
         400
       );
     }
+  }
+
+  // Preço: só OWNER pode vender por valor diferente do cadastrado.
+  //
+  // Sem esta checagem qualquer usuário poderia mandar unitPrice arbitrário na
+  // requisição, porque o valor vem do cliente. Para EMPLOYEE o preço é sempre
+  // o do produto; os overrides do OWNER ficam registrados no AuditLog.
+  const priceOverrides: Array<{
+    sku: string;
+    name: string;
+    originalPrice: number;
+    soldPrice: number;
+  }> = [];
+
+  for (const item of input.items) {
+    const product = productMap.get(item.productId)!;
+    const catalogPrice = Number(product.salePrice);
+    // tolerância de 1 centavo para não brigar com arredondamento de float
+    const differs = Math.abs(item.unitPrice - catalogPrice) > 0.005;
+
+    if (!differs) continue;
+
+    if (userRole !== 'OWNER') {
+      throw new AppError(
+        `Você não tem permissão para alterar o preço de "${product.name}". ` +
+          `Preço cadastrado: ${catalogPrice.toFixed(2)}`,
+        403
+      );
+    }
+
+    priceOverrides.push({
+      sku: product.sku,
+      name: product.name,
+      originalPrice: catalogPrice,
+      soldPrice: item.unitPrice,
+    });
   }
 
   // Calcular totais
@@ -185,7 +226,12 @@ export async function createSale(input: CreateSaleInput, userId: string) {
     entityType: 'sale',
     entityId: sale.id,
     userId,
-    metadata: { saleNumber: sale.saleNumber, total, itemCount: input.items.length } as object,
+    metadata: {
+      saleNumber: sale.saleNumber,
+      total,
+      itemCount: input.items.length,
+      ...(priceOverrides.length > 0 && { priceOverrides }),
+    } as object,
   });
 
   return sale;

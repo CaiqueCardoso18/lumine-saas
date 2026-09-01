@@ -20,6 +20,7 @@ import { Product } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { ProductFormDialog } from '@/components/products/ProductFormDialog';
 import { FilterSelect, FilterChip, FilterOption } from '@/components/ui/filter-select';
+import { BulkEditPanel } from '@/components/products/BulkEditPanel';
 import { usePermission } from '@/hooks/usePermission';
 
 const STATUS_BADGE: Record<string, 'success' | 'warning' | 'danger' | 'default'> = {
@@ -87,8 +88,6 @@ function ProductsPageContent() {
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [bulkPrice, setBulkPrice] = useState('');
-  const [bulkStock, setBulkStock] = useState('');
 
   // Abrir dialog ao vir do dashboard via ?new=true
   useEffect(() => {
@@ -137,20 +136,6 @@ function ProductsPageContent() {
     onError: () => toast({ title: 'Erro ao remover produto', variant: 'destructive' }),
   });
 
-  const bulkMutation = useMutation({
-    mutationFn: (updates: { salePrice?: number; quantity?: number }) =>
-      api.patch('/api/products/bulk', { productIds: Array.from(selectedIds), updates }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['products'] });
-      setSelectedIds(new Set());
-      setBulkOpen(false);
-      setBulkPrice('');
-      setBulkStock('');
-      toast({ title: `${selectedIds.size} produto(s) atualizados!` });
-    },
-    onError: () => toast({ title: 'Erro ao atualizar produtos', variant: 'destructive' }),
-  });
-
   const products = data?.data ?? [];
   const meta = data?.meta;
   const allSelected = products.length > 0 && products.every((p) => selectedIds.has(p.id));
@@ -170,17 +155,6 @@ function ProductsPageContent() {
       else next.add(id);
       return next;
     });
-  }
-
-  function applyBulk() {
-    const updates: { salePrice?: number; quantity?: number } = {};
-    if (bulkPrice) updates.salePrice = parseFloat(bulkPrice);
-    if (bulkStock) updates.quantity = parseInt(bulkStock);
-    if (!updates.salePrice && !updates.quantity) {
-      toast({ title: 'Informe preço ou estoque para atualizar', variant: 'destructive' });
-      return;
-    }
-    bulkMutation.mutate(updates);
   }
 
   return (
@@ -344,9 +318,9 @@ function ProductsPageContent() {
         )}
       </div>
 
-      {/* Bulk action bar */}
+      {/* Barra de seleção + painel de edição em massa */}
       <AnimatePresence>
-        {selectedIds.size > 0 && canManage && (
+        {selectedIds.size > 0 && canManage && !bulkOpen && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -357,48 +331,25 @@ function ProductsPageContent() {
               {selectedIds.size} produto(s) selecionado(s)
             </span>
             <div className="flex gap-2 ml-auto flex-wrap">
-              {bulkOpen ? (
-                <>
-                  <Input
-                    placeholder="Novo preço (R$)"
-                    className="w-36 h-8 text-sm"
-                    type="number"
-                    step="0.01"
-                    value={bulkPrice}
-                    onChange={(e) => setBulkPrice(e.target.value)}
-                  />
-                  <Input
-                    placeholder="Nova qtd"
-                    className="w-28 h-8 text-sm"
-                    type="number"
-                    value={bulkStock}
-                    onChange={(e) => setBulkStock(e.target.value)}
-                  />
-                  <Button size="sm" onClick={applyBulk} disabled={bulkMutation.isPending}>
-                    Aplicar
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setBulkOpen(false)}>
-                    Cancelar
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button size="sm" variant="outline" onClick={() => setBulkOpen(true)}>
-                    <Tag size={14} className="mr-2" />
-                    Alterar Preço/Estoque
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setSelectedIds(new Set())}
-                  >
-                    <X size={14} className="mr-1" />
-                    Limpar seleção
-                  </Button>
-                </>
-              )}
+              <Button size="sm" variant="outline" onClick={() => setBulkOpen(true)}>
+                <Tag size={14} className="mr-2" />
+                Editar em massa
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+                <X size={14} className="mr-1" />
+                Limpar seleção
+              </Button>
             </div>
           </motion.div>
+        )}
+
+        {selectedIds.size > 0 && canManage && bulkOpen && (
+          <BulkEditPanel
+            key="bulk-panel"
+            productIds={Array.from(selectedIds)}
+            onClose={() => setBulkOpen(false)}
+            onDone={() => { setBulkOpen(false); setSelectedIds(new Set()); }}
+          />
         )}
       </AnimatePresence>
 

@@ -56,7 +56,10 @@ lumine_saas/
   ignora a própria dimensão (cross-filter estilo Power BI): escolher Categoria filtra
   as marcas disponíveis, mas o dropdown de Categoria continua listando todas.
 - Paginação server-side
-- Edição em massa (PATCH `/api/products/bulk`) — alterar preço/estoque de múltiplos produtos
+- **Edição em massa** (PATCH `/api/products/bulk`) — preços, estoque, estoque mínimo,
+  categoria, status, público, marca, tamanho, cor e descrição curta. Só os campos
+  enviados são alterados. Não usa `updateMany`: o `searchText` é por produto, então
+  roda update individual dentro de uma transação.
 - Histórico de alterações via AuditLog
 - Endpoint de estoque baixo (`/api/products/low-stock`)
 
@@ -126,12 +129,47 @@ lumine_saas/
   - Melhor dia/horário de vendas
   - Combos frequentes (produtos vendidos juntos)
 
-### 9. Configurações (`/api/settings/*`)
+### 9. Auditoria (`/api/audit/*`)
+- Leitura do AuditLog, que já era gravado por todos os módulos mas não tinha consulta
+- `GET /api/audit` — paginado, filtros por ação, tipo de entidade, usuário e período
+- `GET /api/audit/facets` — contagem por dimensão para os dropdowns
+- Frontend `/audit`: cada linha expande mostrando o diff antes/depois dos campos
+  que realmente mudaram, mais o metadata bruto
+- Exige permissão `view_audit`
+
+### 10. Configurações (`/api/settings/*`)
 - Perfil da loja (nome, logo, endereço)
 - CRUD de categorias e subcategorias
 - Estoque mínimo padrão
 - Gerenciar usuários
 - Backup manual (download SQL dump)
+
+## Permissões
+
+`PERMISSIONS` em `backend/src/middleware/requirePermission.ts` é a fonte da verdade.
+`frontend/src/hooks/usePermission.ts` e a lista em Configurações espelham ela — as
+três precisam andar juntas.
+
+| Permissão | O que libera |
+|---|---|
+| `view_orders` | Aba Pedidos de Reposição |
+| `view_cost_price` | Preço de custo e margem |
+| `manage_products` | Criar/editar/excluir produto, edição em massa |
+| `view_analytics` | Analytics e Insights |
+| `upload` | Importar planilha |
+| `manage_inventory` | Contagens e movimentações de estoque |
+| `cancel_sale` | Estornar venda (mexe em estoque e caixa) |
+| `view_audit` | Tela de Auditoria |
+
+**Regras:**
+- OWNER ignora as permissões — acesso total
+- `requirePermission()` valida no SERVIDOR. Antes as permissões só existiam no
+  frontend, então um EMPLOYEE conseguia chamar a API direto e fazer qualquer coisa.
+- Permissões ficam em cache por 30s; `invalidatePermissionCache(userId)` é chamado
+  ao salvar as permissões de um usuário
+- **Alterar preço na venda NÃO é permissão** — é restrito ao role OWNER.
+  `createSale` compara o `unitPrice` recebido com o preço cadastrado e devolve 403
+  se quem enviou não for OWNER. Overrides ficam no metadata do AuditLog.
 
 ## Design System
 

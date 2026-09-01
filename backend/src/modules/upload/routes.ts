@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { authenticate } from '../../middleware/auth';
+import { requirePermission } from '../../middleware/requirePermission';
 import { preview, confirm, history } from './controller';
 import { env } from '../../config/env';
 
@@ -24,6 +25,7 @@ const upload = multer({
 const router = Router();
 
 router.use(authenticate);
+router.use(requirePermission('upload'));
 
 router.post('/preview', upload.single('file'), preview);
 router.post('/confirm', upload.single('file'), confirm);

@@ -227,10 +227,34 @@ export async function bulkUpdateProducts(input: BulkUpdateInput, userId: string)
     throw new NotFoundError('Um ou mais produtos não foram encontrados');
   }
 
-  await prisma.product.updateMany({
-    where: { id: { in: productIds } },
-    data: updates,
-  });
+  // Não dá para usar updateMany: o searchText é específico de cada produto
+  // (junta nome, marca, cor, categoria...), então precisa ser recalculado
+  // linha por linha depois de aplicar as alterações.
+  const categories = await prisma.category.findMany({ select: { id: true, name: true } });
+  const categoryNames = new Map(categories.map((c) => [c.id, c.name]));
+
+  await prisma.$transaction(
+    products.map((product) => {
+      const merged = { ...product, ...updates };
+      const categoryId = updates.categoryId ?? product.categoryId;
+
+      return prisma.product.update({
+        where: { id: product.id },
+        data: {
+          ...updates,
+          searchText: buildSearchText({
+            ...merged,
+            categoryName: categoryNames.get(categoryId),
+          }),
+        },
+      });
+    })
+  );
+
+  // Detecta o tipo predominante da alteração, para o log ficar pesquisável
+  const changedFields = Object.keys(updates).filter(
+    (k) => updates[k as keyof typeof updates] !== undefined
+  );
 
   await createAuditLog({
     prisma,
@@ -238,10 +262,22 @@ export async function bulkUpdateProducts(input: BulkUpdateInput, userId: string)
     entityType: 'product',
     entityId: productIds.join(','),
     userId,
-    metadata: { productIds, updates } as object,
+    metadata: {
+      productCount: productIds.length,
+      changedFields,
+      updates,
+      // Guarda o valor anterior de cada produto para permitir auditoria real
+      before: products.map((p) => ({
+        id: p.id,
+        sku: p.sku,
+        ...Object.fromEntries(
+          changedFields.map((f) => [f, (p as unknown as Record<string, unknown>)[f]])
+        ),
+      })),
+    } as object,
   });
 
-  return { updated: productIds.length };
+  return { updated: productIds.length, changedFields };
 }
 
 // ─── Facets (contagens por dimensão, estilo Power BI) ────────

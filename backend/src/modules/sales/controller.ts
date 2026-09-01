@@ -32,7 +32,7 @@ export async function show(req: Request, res: Response, next: NextFunction) {
 
 export async function create(req: Request, res: Response, next: NextFunction) {
   try {
-    const sale = await createSale(req.body, req.user!.userId);
+    const sale = await createSale(req.body, req.user!.userId, req.user!.role);
     return sendSuccess(res, sale, 201);
   } catch (err) {
     next(err);

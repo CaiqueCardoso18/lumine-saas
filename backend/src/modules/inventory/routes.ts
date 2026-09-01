@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth';
+import { requirePermission } from '../../middleware/requirePermission';
 import { validate } from '../../middleware/validate';
 import {
   createSessionCtrl, listSessionsCtrl, getSessionCtrl,
@@ -14,6 +15,7 @@ import {
 const router = Router();
 
 router.use(authenticate);
+router.use(requirePermission('manage_inventory'));
 
 // ─── Sessões de Inventário (Contagem Física) ─────────────────
 router.get('/sessions', validate(listSessionsSchema, 'query'), listSessionsCtrl);

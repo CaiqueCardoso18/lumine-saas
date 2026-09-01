@@ -2,10 +2,12 @@
 
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, Plus, Minus, Trash2, Loader2, ShoppingCart } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, Loader2, ShoppingCart, Pencil } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { SelectMenu } from '@/components/ui/select-menu';
+import { usePermission } from '@/hooks/usePermission';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
@@ -29,7 +31,11 @@ interface Props {
 
 export function NewSaleDialog({ open, onOpenChange }: Props) {
   const qc = useQueryClient();
+  const { isOwner } = usePermission();
   const [search, setSearch] = useState('');
+  // Só OWNER pode vender por valor diferente do cadastrado — o backend
+  // rejeita a venda se um EMPLOYEE mandar unitPrice divergente.
+  const [editingPrice, setEditingPrice] = useState<string | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('PIX');
   const [installments, setInstallments] = useState(1);
@@ -44,6 +50,14 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
   });
 
   const searchProducts = searchResult?.data ?? [];
+
+  function setUnitPrice(productId: string, price: number) {
+    setCart((prev) =>
+      prev.map((i) =>
+        i.product.id === productId ? { ...i, unitPrice: Math.max(0, price) } : i
+      )
+    );
+  }
 
   const addToCart = useCallback((product: Product) => {
     setCart((prev) => {
@@ -232,6 +246,46 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
                           {formatCurrency(item.unitPrice * item.quantity)}
                         </span>
                       </div>
+
+                      {/* Preço unitário — editável apenas para OWNER */}
+                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-lumine-lavender/30">
+                        {isOwner && editingPrice === item.product.id ? (
+                          <div className="flex items-center gap-1.5 w-full">
+                            <span className="text-xs text-lumine-warm-gray">R$</span>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              autoFocus
+                              value={item.unitPrice}
+                              onChange={(e) => setUnitPrice(item.product.id, Number(e.target.value))}
+                              onBlur={() => setEditingPrice(null)}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') setEditingPrice(null); }}
+                              className="h-7 text-xs flex-1"
+                            />
+                          </div>
+                        ) : (
+                          <>
+                            <span className="text-xs text-lumine-warm-gray">
+                              {formatCurrency(item.unitPrice)} un.
+                              {item.unitPrice !== Number(item.product.salePrice) && (
+                                <span className="text-lumine-danger ml-1.5">
+                                  (tabela: {formatCurrency(Number(item.product.salePrice))})
+                                </span>
+                              )}
+                            </span>
+                            {isOwner && (
+                              <button
+                                onClick={() => setEditingPrice(item.product.id)}
+                                className="text-xs text-lumine-lavender hover:text-lumine-sage transition-colors inline-flex items-center gap-1"
+                              >
+                                <Pencil size={11} />
+                                Alterar
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </motion.div>
                   ))}
                 </AnimatePresence>
@@ -242,31 +296,30 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
             <div className="p-4 border-t border-lumine-lavender-pale space-y-3 shrink-0">
               <div className="space-y-1.5">
                 <Label className="text-xs">Forma de pagamento</Label>
-                <select
+                <SelectMenu
                   value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                  className="flex h-9 w-full rounded-xl border border-lumine-lavender-pale bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lumine-lavender"
-                >
-                  {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
+                  onChange={(v) => setPaymentMethod(v as PaymentMethod)}
+                  dropUp
+                  options={Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => ({
+                    value,
+                    label,
+                  }))}
+                />
               </div>
 
               {paymentMethod === 'CREDIT_CARD' && (
                 <div className="space-y-1.5">
                   <Label className="text-xs">Parcelas</Label>
-                  <select
-                    value={installments}
-                    onChange={(e) => setInstallments(Number(e.target.value))}
-                    className="flex h-9 w-full rounded-xl border border-lumine-lavender-pale bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lumine-lavender"
-                  >
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
-                      <option key={n} value={n}>
-                        {n}x {n > 1 ? `de ${formatCurrency(total / n)}` : '(à vista)'}
-                      </option>
-                    ))}
-                  </select>
+                  <SelectMenu
+                    value={String(installments)}
+                    onChange={(v) => setInstallments(Number(v))}
+                    dropUp
+                    options={Array.from({ length: 12 }, (_, i) => i + 1).map((n) => ({
+                      value: String(n),
+                      label: n > 1 ? `${n}x` : '1x (à vista)',
+                      hint: n > 1 ? `de ${formatCurrency(total / n)}` : undefined,
+                    }))}
+                  />
                 </div>
               )}
 

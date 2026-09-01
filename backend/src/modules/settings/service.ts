@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { prisma } from '../../config/database';
+import { invalidatePermissionCache } from '../../middleware/requirePermission';
 import { AppError, NotFoundError } from '../../shared/errors/AppError';
 
 type SettingValue = string | number | boolean | object;
@@ -92,6 +93,9 @@ export async function toggleUserActive(id: string) {
 }
 
 export async function updateUserPermissions(id: string, permissions: string[]) {
+  // O middleware guarda as permissões em cache por 30s — limpa para a mudança
+  // valer imediatamente em vez de esperar o cache expirar.
+  invalidatePermissionCache(id);
   const user = await prisma.user.findUnique({ where: { id } });
   if (!user) throw new NotFoundError('Usuário');
   return prisma.user.update({

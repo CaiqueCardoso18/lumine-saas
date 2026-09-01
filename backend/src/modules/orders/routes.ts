@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth';
+import { requirePermission } from '../../middleware/requirePermission';
 import { validate } from '../../middleware/validate';
 import {
   indexSuppliers, createSupplierHandler, updateSupplierHandler, deleteSupplierHandler,
@@ -13,6 +14,7 @@ import {
 const router = Router();
 
 router.use(authenticate);
+router.use(requirePermission('view_orders'));
 
 // Suppliers
 router.get('/suppliers', indexSuppliers);

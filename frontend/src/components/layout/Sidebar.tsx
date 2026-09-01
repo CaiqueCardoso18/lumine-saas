@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Package, ShoppingCart, TrendingUp, Lightbulb,
-  Upload, Settings, ChevronLeft, ChevronRight, ClipboardList, X, Warehouse,
+  Upload, Settings, ChevronLeft, ChevronRight, ClipboardList, X, Warehouse, ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermission } from '@/hooks/usePermission';
@@ -21,6 +21,7 @@ const navItems = [
   { href: '/insights',   icon: Lightbulb,        label: 'Insights'     },
   { href: '/inventory',  icon: Warehouse,        label: 'Inventário'   },
   { href: '/upload',     icon: Upload,           label: 'Importar'     },
+  { href: '/audit',      icon: ShieldCheck,      label: 'Auditoria'    },
   { href: '/settings',   icon: Settings,         label: 'Configurações'},
 ];
 
@@ -92,7 +93,7 @@ function Logo({ collapsed }: { collapsed: boolean }) {
               <span className="text-white text-xs font-accent font-bold">L</span>
             </div>
             <span className="text-white font-accent font-semibold text-lg whitespace-nowrap">
-              Lumine.io
+              Lumine
             </span>
           </motion.div>
         ) : (
@@ -147,7 +148,7 @@ export function Sidebar() {
             <div className="w-8 h-8 rounded-full bg-lumine-lavender flex items-center justify-center shrink-0">
               <span className="text-white text-xs font-accent font-bold">L</span>
             </div>
-            <span className="text-white font-accent font-semibold text-lg">Lumine.io</span>
+            <span className="text-white font-accent font-semibold text-lg">Lumine</span>
           </div>
           <button onClick={close} className="p-1 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors">
             <X size={20} strokeWidth={1.5} />
