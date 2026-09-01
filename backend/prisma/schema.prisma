@@ -94,6 +94,10 @@ model Product {
   imageUrl      String?       @map("image_url")
   status        ProductStatus @default(ACTIVE)
   barcode       String?
+  /// Concatenação normalizada (sem acento, minúscula) de sku/nome/marca/tamanho/
+  /// cor/barcode/descrição curta/categoria/público. Usada pela busca multi-termo.
+  /// Mantida por buildSearchText() em toda criação e atualização.
+  searchText    String?       @map("search_text")
   createdAt     DateTime      @default(now()) @map("created_at")
   updatedAt     DateTime      @updatedAt @map("updated_at")
   deletedAt     DateTime?     @map("deleted_at")
@@ -112,6 +116,8 @@ model Product {
   @@index([status])
   @@index([deletedAt])
   @@index([audience])
+  @@index([brand])
+  @@index([searchText])
   @@map("products")
 }
 

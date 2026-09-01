@@ -8,6 +8,7 @@ import {
   updateProduct,
   softDeleteProduct,
   bulkUpdateProducts,
+  getProductFacets,
 } from './service';
 import { sendSuccess, sendPaginated } from '../../shared/utils/response';
 
@@ -77,6 +78,15 @@ export async function destroy(req: Request, res: Response, next: NextFunction) {
 export async function bulkUpdate(req: Request, res: Response, next: NextFunction) {
   try {
     const result = await bulkUpdateProducts(req.body, req.user!.userId);
+    return sendSuccess(res, result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function facets(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await getProductFacets(req.query as unknown as Parameters<typeof getProductFacets>[0]);
     return sendSuccess(res, result);
   } catch (err) {
     next(err);

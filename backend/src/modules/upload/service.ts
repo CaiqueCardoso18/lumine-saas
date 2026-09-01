@@ -2,6 +2,7 @@ import * as xlsx from 'xlsx';
 import { prisma } from '../../config/database';
 import { AppError } from '../../shared/errors/AppError';
 import { createAuditLog } from '../../shared/utils/auditLog';
+import { buildSearchText } from '../../shared/utils/search';
 import {
   aggregateVariants, categoryKey, parseAudience, parseMoney,
   normalizeRowKeys, VariantRow,
@@ -210,11 +211,11 @@ export async function confirmUpload(fileBuffer: Buffer, fileName: string, userId
 
   // Índice de categorias por chave normalizada (sem acento, caixa baixa, singular)
   const allCategories = await prisma.category.findMany();
-  const categoryMap = new Map(allCategories.map((c) => [categoryKey(c.name), c.id]));
+  const categoryMap = new Map(allCategories.map((c) => [categoryKey(c.name), { id: c.id, name: c.name }]));
 
   /** Acha a categoria por nome flexível; se não existir, cria. */
-  async function resolveCategoryId(name?: string): Promise<string> {
-    if (!name) return defaultCategory!.id;
+  async function resolveCategory(name?: string): Promise<{ id: string; name: string }> {
+    if (!name) return { id: defaultCategory!.id, name: defaultCategory!.name };
 
     const key = categoryKey(name);
     const found = categoryMap.get(key);
@@ -225,8 +226,9 @@ export async function confirmUpload(fileBuffer: Buffer, fileName: string, userId
     const created = await prisma.category.create({
       data: { name: name.trim(), slug, sortOrder: 999 },
     });
-    categoryMap.set(key, created.id);
-    return created.id;
+    const entry = { id: created.id, name: created.name };
+    categoryMap.set(key, entry);
+    return entry;
   }
 
   // Parse + agrupamento por variante (mesma lógica do preview)
@@ -255,7 +257,8 @@ export async function confirmUpload(fileBuffer: Buffer, fileName: string, userId
 
   for (const v of variants) {
     try {
-      const categoryId = await resolveCategoryId(v.categoryName);
+      const category = await resolveCategory(v.categoryName);
+      const categoryId = category.id;
       const existing = existingMap.get(v.variantSku);
 
       if (existing) {
@@ -273,6 +276,17 @@ export async function confirmUpload(fileBuffer: Buffer, fileName: string, userId
             ...(v.audience && { audience: v.audience }),
             ...(v.description && { description: v.description }),
             ...(v.shortDescription && { shortDescription: v.shortDescription }),
+            searchText: buildSearchText({
+              sku: v.variantSku,
+              name: v.name,
+              brand: v.brand ?? existing.brand,
+              size: v.size ?? existing.size,
+              color: v.color ?? existing.color,
+              barcode: v.barcode ?? existing.barcode,
+              shortDescription: v.shortDescription ?? existing.shortDescription,
+              audience: v.audience ?? existing.audience,
+              categoryName: category.name,
+            }),
           },
         });
         updatedCount++;
@@ -292,6 +306,17 @@ export async function confirmUpload(fileBuffer: Buffer, fileName: string, userId
             description: v.description,
             shortDescription: v.shortDescription,
             barcode: v.barcode,
+            searchText: buildSearchText({
+              sku: v.variantSku,
+              name: v.name,
+              brand: v.brand,
+              size: v.size,
+              color: v.color,
+              barcode: v.barcode,
+              shortDescription: v.shortDescription,
+              audience: v.audience,
+              categoryName: category.name,
+            }),
           },
         });
         createdCount++;

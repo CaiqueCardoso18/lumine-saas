@@ -47,7 +47,14 @@ lumine_saas/
 ### 2. Produtos & Inventário (`/api/products/*`)
 - CRUD completo com soft delete (`deletedAt`)
 - Campos: sku (único), nome, descrição, descrição curta (máx 200), categoria, subcategoria, marca, tamanho, cor, público (ADULTO/INFANTIL, opcional), preço de custo, preço de venda, quantidade, estoque mínimo, imagem, status, barcode
-- Filtros: categoria, status, público, busca por nome/SKU
+- **Busca multi-termo:** campo `searchText` (concatenação normalizada sem acento de
+  sku/nome/marca/tamanho/cor/barcode/descrição curta/categoria/público) mantido por
+  `buildSearchText()` em TODO write (CRUD e import). Cada termo digitado precisa
+  aparecer nele, então "sapatilha rosa EUA" e "brise 38" funcionam.
+- Filtros: categoria, marca, tamanho, cor, público, status, estoque baixo, faixa de preço
+- `GET /api/products/facets` — contagem por dimensão para os dropdowns. Cada facet
+  ignora a própria dimensão (cross-filter estilo Power BI): escolher Categoria filtra
+  as marcas disponíveis, mas o dropdown de Categoria continua listando todas.
 - Paginação server-side
 - Edição em massa (PATCH `/api/products/bulk`) — alterar preço/estoque de múltiplos produtos
 - Histórico de alterações via AuditLog

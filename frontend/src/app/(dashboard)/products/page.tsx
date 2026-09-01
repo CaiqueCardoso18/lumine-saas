@@ -7,7 +7,7 @@ import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Search, Download, Edit, Trash2, AlertTriangle, Package,
-  CheckSquare, Square, X, Tag, BarChart2,
+  CheckSquare, Square, X, Tag, BarChart2, SlidersHorizontal,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +19,7 @@ import { downloadTemplate } from '@/lib/downloadTemplate';
 import { Product } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { ProductFormDialog } from '@/components/products/ProductFormDialog';
+import { FilterSelect, FilterChip, FilterOption } from '@/components/ui/filter-select';
 import { usePermission } from '@/hooks/usePermission';
 
 const STATUS_BADGE: Record<string, 'success' | 'warning' | 'danger' | 'default'> = {
@@ -31,6 +32,18 @@ const AUDIENCE_LABELS: Record<string, string> = {
   ADULTO: 'Adulto',
   INFANTIL: 'Infantil',
 };
+
+interface Facets {
+  total: number;
+  categories: Array<{ value: string; label: string; count: number }>;
+  brands: Array<{ value: string; count: number }>;
+  sizes: Array<{ value: string; count: number }>;
+  colors: Array<{ value: string; count: number }>;
+  audiences: Array<{ value: string; count: number }>;
+  statuses: Array<{ value: string; count: number }>;
+  priceRange: { min: number; max: number };
+  lowStockCount: number;
+}
 
 const STATUS_LABELS: Record<string, string> = {
   ACTIVE: 'Ativo',
@@ -46,8 +59,30 @@ function ProductsPageContent() {
   const canManage = can('manage_products');
 
   const [search, setSearch] = useState('');
-  const [audience, setAudience] = useState('');
+  const [filters, setFilters] = useState({
+    categoryId: '', brand: '', size: '', color: '',
+    audience: '', status: '', lowStock: '',
+  });
   const [page, setPage] = useState(1);
+
+  function setFilter(key: keyof typeof filters, value: string) {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+    setPage(1);
+  }
+
+  function clearFilters() {
+    setFilters({ categoryId: '', brand: '', size: '', color: '', audience: '', status: '', lowStock: '' });
+    setSearch('');
+    setPage(1);
+  }
+
+  // Params compartilhados entre a listagem e os facets
+  const filterParams = new URLSearchParams();
+  if (search) filterParams.set('search', search);
+  Object.entries(filters).forEach(([k, v]) => { if (v) filterParams.set(k, v); });
+  const filterKey = filterParams.toString();
+
+  const activeCount = Object.values(filters).filter(Boolean).length;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -64,15 +99,34 @@ function ProductsPageContent() {
   }, [searchParams]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['products', page, search, audience],
+    queryKey: ['products', page, filterKey],
     queryFn: () => {
-      const params = new URLSearchParams({ page: String(page), limit: '20' });
-      if (search) params.set('search', search);
-      if (audience) params.set('audience', audience);
+      const params = new URLSearchParams(filterKey);
+      params.set('page', String(page));
+      params.set('limit', '20');
       return api.paginated<Product>(`/api/products?${params}`);
     },
     placeholderData: (prev) => prev,
   });
+
+  // Facets: contagens por dimensão, recalculadas conforme os filtros ativos
+  const { data: facetsData } = useQuery({
+    queryKey: ['product-facets', filterKey],
+    queryFn: () => api.get<Facets>(`/api/products/facets?${filterKey}`),
+    placeholderData: (prev) => prev,
+  });
+
+  const facets = facetsData?.data;
+
+  const asOptions = (
+    rows: Array<{ value: string; count: number }> | undefined,
+    labelMap?: Record<string, string>
+  ): FilterOption[] =>
+    (rows ?? []).map((r) => ({
+      value: r.value,
+      label: labelMap?.[r.value] ?? r.value,
+      count: r.count,
+    }));
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/api/products/${id}`),
@@ -131,32 +185,28 @@ function ProductsPageContent() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-      {/* Toolbar */}
+      {/* Barra de busca e ações */}
       <div className="flex flex-col sm:flex-row gap-3 justify-between">
-        <div className="relative flex-1 max-w-sm">
+        <div className="relative flex-1 max-w-md">
           <Search size={16} strokeWidth={1.5} className="absolute left-3 top-1/2 -translate-y-1/2 text-lumine-warm-gray" />
           <Input
-            placeholder="Buscar por nome, SKU..."
-            className="pl-9"
+            placeholder="Buscar por nome, SKU, cor, tamanho, marca..."
+            className="pl-9 pr-9"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
+          {search && (
+            <button
+              onClick={() => { setSearch(''); setPage(1); }}
+              aria-label="Limpar busca"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-lumine-warm-gray hover:text-lumine-sage transition-colors"
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
         <div className="flex gap-2">
-          <select
-            value={audience}
-            onChange={(e) => { setAudience(e.target.value); setPage(1); }}
-            className="h-9 rounded-xl border border-lumine-lavender-pale bg-white px-3 text-sm text-lumine-charcoal focus:outline-none focus:ring-2 focus:ring-lumine-lavender"
-          >
-            <option value="">Todos os públicos</option>
-            <option value="ADULTO">Adulto</option>
-            <option value="INFANTIL">Infantil</option>
-          </select>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={downloadTemplate}
-          >
+          <Button variant="outline" size="sm" onClick={downloadTemplate}>
             <Download size={14} className="mr-2" />
             Template
           </Button>
@@ -167,6 +217,131 @@ function ProductsPageContent() {
             </Button>
           )}
         </div>
+      </div>
+
+      {/* Filtros */}
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 text-xs text-lumine-warm-gray mr-1">
+            <SlidersHorizontal size={13} />
+            Filtros
+          </span>
+
+          <FilterSelect
+            label="Categoria"
+            placeholder="Todas"
+            value={filters.categoryId}
+            onChange={(v) => setFilter('categoryId', v)}
+            options={(facets?.categories ?? []).map((c) => ({
+              value: c.value, label: c.label, count: c.count,
+            }))}
+            searchable
+          />
+          <FilterSelect
+            label="Marca"
+            placeholder="Todas"
+            value={filters.brand}
+            onChange={(v) => setFilter('brand', v)}
+            options={asOptions(facets?.brands)}
+            searchable
+          />
+          <FilterSelect
+            label="Tamanho"
+            placeholder="Todos"
+            value={filters.size}
+            onChange={(v) => setFilter('size', v)}
+            options={asOptions(facets?.sizes)}
+            searchable
+          />
+          <FilterSelect
+            label="Cor"
+            placeholder="Todas"
+            value={filters.color}
+            onChange={(v) => setFilter('color', v)}
+            options={asOptions(facets?.colors)}
+            searchable
+          />
+          <FilterSelect
+            label="Público"
+            placeholder="Todos"
+            value={filters.audience}
+            onChange={(v) => setFilter('audience', v)}
+            options={asOptions(facets?.audiences, AUDIENCE_LABELS)}
+          />
+          <FilterSelect
+            label="Status"
+            placeholder="Todos"
+            value={filters.status}
+            onChange={(v) => setFilter('status', v)}
+            options={asOptions(facets?.statuses, STATUS_LABELS)}
+          />
+
+          <button
+            type="button"
+            onClick={() => setFilter('lowStock', filters.lowStock ? '' : 'true')}
+            className={`flex items-center gap-1.5 h-9 px-3 rounded-xl border text-sm transition-all whitespace-nowrap ${
+              filters.lowStock
+                ? 'border-lumine-danger bg-lumine-danger/10 text-lumine-danger ring-1 ring-lumine-danger/40'
+                : 'border-lumine-lavender-pale bg-white text-lumine-warm-gray hover:border-lumine-lavender'
+            }`}
+          >
+            <AlertTriangle size={13} />
+            Estoque baixo
+            {facets?.lowStockCount !== undefined && (
+              <span className="text-xs tabular-nums opacity-70">{facets.lowStockCount}</span>
+            )}
+          </button>
+        </div>
+
+        {/* Chips dos filtros ativos */}
+        {(activeCount > 0 || search) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {search && (
+              <FilterChip label="Busca" value={search} onRemove={() => { setSearch(''); setPage(1); }} />
+            )}
+            {filters.categoryId && (
+              <FilterChip
+                label="Categoria"
+                value={facets?.categories.find((c) => c.value === filters.categoryId)?.label ?? '—'}
+                onRemove={() => setFilter('categoryId', '')}
+              />
+            )}
+            {filters.brand && (
+              <FilterChip label="Marca" value={filters.brand} onRemove={() => setFilter('brand', '')} />
+            )}
+            {filters.size && (
+              <FilterChip label="Tamanho" value={filters.size} onRemove={() => setFilter('size', '')} />
+            )}
+            {filters.color && (
+              <FilterChip label="Cor" value={filters.color} onRemove={() => setFilter('color', '')} />
+            )}
+            {filters.audience && (
+              <FilterChip
+                label="Público"
+                value={AUDIENCE_LABELS[filters.audience] ?? filters.audience}
+                onRemove={() => setFilter('audience', '')}
+              />
+            )}
+            {filters.status && (
+              <FilterChip
+                label="Status"
+                value={STATUS_LABELS[filters.status] ?? filters.status}
+                onRemove={() => setFilter('status', '')}
+              />
+            )}
+            {filters.lowStock && (
+              <FilterChip label="Estoque" value="Baixo" onRemove={() => setFilter('lowStock', '')} />
+            )}
+
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="text-xs text-lumine-warm-gray hover:text-lumine-danger underline underline-offset-2 transition-colors ml-1"
+            >
+              Limpar tudo
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Bulk action bar */}

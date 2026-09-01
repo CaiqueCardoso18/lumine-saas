@@ -38,7 +38,7 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
 
   const { data: searchResult } = useQuery({
     queryKey: ['products', 'search', search],
-    queryFn: () => api.paginated<Product>(`/api/products?search=${search}&status=ACTIVE&limit=10`),
+    queryFn: () => api.paginated<Product>(`/api/products?search=${encodeURIComponent(search)}&status=ACTIVE&limit=20`),
     enabled: search.length >= 2,
     staleTime: 30 * 1000,
   });
@@ -124,7 +124,7 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
                 <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar produto por nome ou SKU..."
+                  placeholder="Buscar por nome, SKU, cor, tamanho, marca..."
                   className="pl-9"
                   autoFocus
                 />
@@ -145,7 +145,16 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-lumine-charcoal truncate">{product.name}</p>
-                        <p className="text-xs text-lumine-warm-gray">{product.sku} · Estoque: {product.quantity}</p>
+                        <p className="text-xs text-lumine-warm-gray truncate">
+                          {product.sku}
+                          {product.size && ` · ${product.size}`}
+                          {product.color && ` · ${product.color}`}
+                          {product.audience === 'INFANTIL' && ' · Infantil'}
+                          {' · '}
+                          <span className={product.quantity <= 0 ? 'text-lumine-danger font-medium' : ''}>
+                            {product.quantity <= 0 ? 'Sem estoque' : `Estoque: ${product.quantity}`}
+                          </span>
+                        </p>
                       </div>
                       <div className="text-right shrink-0">
                         <p className="text-sm font-semibold text-lumine-gold">{formatCurrency(product.salePrice)}</p>
@@ -157,13 +166,21 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
               )}
 
               {search.length >= 2 && searchProducts.length === 0 && (
-                <p className="text-sm text-lumine-warm-gray text-center py-8">Nenhum produto encontrado</p>
+                <div className="text-center py-8">
+                  <p className="text-sm text-lumine-warm-gray">Nenhum produto encontrado</p>
+                  <p className="text-xs text-lumine-warm-gray mt-1">
+                    Tente menos termos, ou confira se o produto está ativo
+                  </p>
+                </div>
               )}
 
               {search.length < 2 && (
-                <p className="text-sm text-lumine-warm-gray text-center py-8 opacity-60">
-                  Digite para buscar produtos...
-                </p>
+                <div className="text-center py-8 opacity-70">
+                  <p className="text-sm text-lumine-warm-gray">Digite para buscar produtos...</p>
+                  <p className="text-xs text-lumine-warm-gray mt-1">
+                    Pode combinar termos: &quot;sapatilha rosa 38&quot;
+                  </p>
+                </div>
               )}
             </div>
           </div>

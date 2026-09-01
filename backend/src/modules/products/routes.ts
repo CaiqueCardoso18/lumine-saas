@@ -2,10 +2,11 @@ import { Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import {
-  index, lowStock, show, history, create, update, destroy, bulkUpdate, downloadTemplate,
+  index, lowStock, show, history, create, update, destroy, bulkUpdate, downloadTemplate, facets,
 } from './controller';
 import {
   createProductSchema, updateProductSchema, bulkUpdateSchema, listProductsSchema,
+  productFacetsSchema,
 } from './validator';
 
 const router = Router();
@@ -15,6 +16,7 @@ router.get('/template', downloadTemplate);
 
 router.use(authenticate);
 router.get('/low-stock', lowStock);
+router.get('/facets', validate(productFacetsSchema, 'query'), facets);
 router.get('/', validate(listProductsSchema, 'query'), index);
 router.get('/:id', show);
 router.get('/:id/history', history);

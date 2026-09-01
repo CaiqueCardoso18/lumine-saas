@@ -50,6 +50,11 @@ export const listProductsSchema = z.object({
   subcategoryId: z.string().optional(),
   status: z.enum(['ACTIVE', 'INACTIVE', 'DISCONTINUED']).optional(),
   audience: z.enum(['ADULTO', 'INFANTIL']).optional(),
+  brand: z.string().optional(),
+  size: z.string().optional(),
+  color: z.string().optional(),
+  minPrice: z.coerce.number().min(0).optional(),
+  maxPrice: z.coerce.number().min(0).optional(),
   lowStock: z.coerce.boolean().optional(),
   sortBy: z.enum(['name', 'sku', 'salePrice', 'quantity', 'createdAt']).default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
@@ -59,3 +64,9 @@ export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
 export type BulkUpdateInput = z.infer<typeof bulkUpdateSchema>;
 export type ListProductsInput = z.infer<typeof listProductsSchema>;
+
+/** Facets usam os mesmos filtros da listagem, sem paginação nem ordenação. */
+export const productFacetsSchema = listProductsSchema
+  .omit({ page: true, limit: true, sortBy: true, sortOrder: true });
+
+export type ProductFacetsInput = z.infer<typeof productFacetsSchema>;
