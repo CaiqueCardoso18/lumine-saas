@@ -48,6 +48,66 @@ export function parseAudience(value?: string | number | null): 'ADULTO' | 'INFAN
   return undefined;
 }
 
+/**
+ * Interpreta valor monetário/numérico vindo da planilha.
+ *
+ * A planilha da loja pode trazer o preço como número (149.9) ou como texto em
+ * formato brasileiro, com símbolo e separador de milhar: "R$ 1.499,00".
+ * Retorna NaN quando não há nada numérico.
+ *
+ * Regra de separador: se houver ',' e '.', o ÚLTIMO que aparece é o decimal e
+ * o outro é separador de milhar. Se houver só '.', trata como decimal, exceto
+ * quando o padrão é claramente milhar (1.234 / 12.345.678).
+ */
+export function parseMoney(value?: string | number | null): number {
+  if (value === null || value === undefined || value === '') return NaN;
+  if (typeof value === 'number') return value;
+
+  // remove tudo que não for dígito, vírgula, ponto ou sinal negativo
+  let s = String(value).trim().replace(/[^\d,.-]/g, '');
+  if (!s || s === '-') return NaN;
+
+  const lastComma = s.lastIndexOf(',');
+  const lastDot = s.lastIndexOf('.');
+
+  if (lastComma !== -1 && lastDot !== -1) {
+    // Ambos presentes: o último é o decimal
+    if (lastComma > lastDot) {
+      s = s.replace(/\./g, '').replace(',', '.'); // 1.234,56
+    } else {
+      s = s.replace(/,/g, ''); // 1,234.56
+    }
+  } else if (lastComma !== -1) {
+    s = s.replace(',', '.'); // 89,90
+  } else if (lastDot !== -1) {
+    // Só ponto: milhar quando é 1-3 dígitos seguido de grupos de exatamente 3
+    if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) {
+      s = s.replace(/\./g, ''); // 1.234 -> 1234
+    }
+    // senão mantém como decimal (89.90)
+  }
+
+  const n = Number(s);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+/**
+ * Normaliza as chaves de uma linha da planilha.
+ *
+ * O xlsx usa o texto do header como chave do objeto. Se o header vier
+ * "Preco_Venda" ou "preco_venda " (com espaço), a chave não casa com o campo
+ * esperado e o valor chega como undefined — que era a causa de "preço inválido"
+ * em toda a planilha mesmo com os valores certos.
+ */
+export function normalizeRowKeys<T extends Record<string, unknown>>(row: T): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(row)) {
+    const clean = normalize(key).replace(/\s+/g, '_');
+    out[clean] = value;
+  }
+  return out;
+}
+
 /** Converte um pedaço do SKU composto: "Rosa EUA" -> "ROSAEUA" */
 function skuPart(text: string): string {
   return normalize(text)

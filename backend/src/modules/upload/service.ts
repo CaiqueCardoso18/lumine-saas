@@ -2,7 +2,10 @@ import * as xlsx from 'xlsx';
 import { prisma } from '../../config/database';
 import { AppError } from '../../shared/errors/AppError';
 import { createAuditLog } from '../../shared/utils/auditLog';
-import { aggregateVariants, categoryKey, parseAudience, VariantRow } from './helpers';
+import {
+  aggregateVariants, categoryKey, parseAudience, parseMoney,
+  normalizeRowKeys, VariantRow,
+} from './helpers';
 
 /**
  * Como tratar a quantidade de produtos que JÁ existem:
@@ -78,19 +81,21 @@ function parseRow(raw: RawRow, rowIndex: number): { data?: ParsedRow; error?: st
   if (!sku) return { error: `Linha ${rowIndex}: SKU é obrigatório` };
   if (!name) return { error: `Linha ${rowIndex}: Nome é obrigatório` };
 
-  const quantity = Number(raw.quantidade);
+  const quantity = parseMoney(raw.quantidade as string | number);
   if (isNaN(quantity) || quantity < 0) {
-    return { error: `Linha ${rowIndex}: Quantidade inválida` };
+    return {
+      error: `Linha ${rowIndex}: Quantidade inválida (recebido: "${raw.quantidade ?? ''}")`,
+    };
   }
 
-  const salePrice = Number(String(raw.preco_venda).replace(',', '.'));
+  const salePrice = parseMoney(raw.preco_venda as string | number);
   if (isNaN(salePrice) || salePrice <= 0) {
-    return { error: `Linha ${rowIndex}: Preço de venda inválido` };
+    return {
+      error: `Linha ${rowIndex}: Preço de venda inválido (recebido: "${raw.preco_venda ?? ''}")`,
+    };
   }
 
-  const costPrice = raw.preco_custo
-    ? Number(String(raw.preco_custo).replace(',', '.'))
-    : 0;
+  const costPrice = parseMoney(raw.preco_custo as string | number);
 
   return {
     data: {
@@ -98,7 +103,7 @@ function parseRow(raw: RawRow, rowIndex: number): { data?: ParsedRow; error?: st
       name,
       quantity: Math.floor(quantity),
       salePrice,
-      costPrice: isNaN(costPrice) ? 0 : costPrice,
+      costPrice: isNaN(costPrice) || costPrice < 0 ? 0 : costPrice,
       categoryName: raw.categoria ? String(raw.categoria).trim() : undefined,
       brand: raw.marca ? String(raw.marca).trim() : undefined,
       size: raw.tamanho ? String(raw.tamanho).trim() : undefined,
@@ -114,7 +119,9 @@ function parseRow(raw: RawRow, rowIndex: number): { data?: ParsedRow; error?: st
 export async function previewUpload(fileBuffer: Buffer, fileName: string, stockMode: StockMode = 'replace') {
   const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = xlsx.utils.sheet_to_json<RawRow>(sheet, { defval: '' });
+  const rows = xlsx.utils
+    .sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
+    .map(normalizeRowKeys) as RawRow[];
 
   if (rows.length === 0) {
     throw new AppError('Planilha vazia ou sem dados válidos');
@@ -193,7 +200,9 @@ export async function previewUpload(fileBuffer: Buffer, fileName: string, stockM
 export async function confirmUpload(fileBuffer: Buffer, fileName: string, userId: string, stockMode: StockMode = 'replace') {
   const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = xlsx.utils.sheet_to_json<RawRow>(sheet, { defval: '' });
+  const rows = xlsx.utils
+    .sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
+    .map(normalizeRowKeys) as RawRow[];
 
   // Categoria padrão (usada só quando a planilha não informa categoria)
   const defaultCategory = await prisma.category.findFirst({ orderBy: { sortOrder: 'asc' } });
