@@ -316,7 +316,19 @@ function ProductsPageContent() {
                         <Badge variant="default">{AUDIENCE_LABELS[product.audience]}</Badge>
                       )}
                       {product.quantity <= product.minStock && (
-                        <AlertTriangle size={14} className="text-lumine-danger shrink-0" />
+                        <span
+                          className="inline-flex items-center gap-1 shrink-0 text-lumine-danger"
+                          title={
+                            product.quantity === 0
+                              ? 'Sem estoque'
+                              : `Estoque baixo: ${product.quantity} em estoque, mínimo definido é ${product.minStock}`
+                          }
+                        >
+                          <AlertTriangle size={14} />
+                          <span className="text-xs whitespace-nowrap hidden sm:inline">
+                            {product.quantity === 0 ? 'Sem estoque' : 'Estoque baixo'}
+                          </span>
+                        </span>
                       )}
                     </div>
                     <p className="text-xs text-lumine-warm-gray mt-0.5">
