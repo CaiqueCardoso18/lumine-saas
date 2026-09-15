@@ -84,13 +84,19 @@ lumine_saas/
 
 ### 4. Vendas / PDV (`/api/sales/*`)
 - Registro de venda com múltiplos itens (carrinho)
-- Busca de produto por nome/SKU/barcode
-- Métodos: CASH, PIX, DEBIT_CARD, CREDIT_CARD, MIXED
-- Pagamento misto via SalePayment (ex: parte PIX, parte cartão)
-- Desconto por item ou por venda total
+- Busca de produto multi-termo (mesma do módulo de produtos)
+- Métodos: CASH, PIX, DEBIT_CARD, CREDIT_CARD, CREDIARIO, MIXED
+- **Pagamento misto:** o array `payments` divide o total entre formas. O backend
+  exige que a soma feche com o total (tolerância de 1 centavo) — antes a venda
+  entrava com valores que não batiam com o caixa. Cada forma pode ter parcelas
+  próprias no cartão de crédito.
+- **Desconto** em valor ou percentual. Quando vem `discountPercent`, o valor em
+  reais é derivado dele no servidor; desconto maior que o subtotal é rejeitado.
+- **Cliente opcional** (`customerId`) — venda de balcão não exige
+- Observação livre por venda (até 1000 caracteres)
 - Venda gera baixa automática no estoque (transação atômica)
-- Cancelamento/estorno devolve estoque
-- Histórico com filtros por data, método, valor
+- Cancelamento/estorno devolve estoque; exige permissão `cancel_sale`
+- **Preço por item** só pode divergir do cadastro se quem vende for OWNER
 
 ### 5. Pedidos de Reposição (`/api/orders/*`)
 - CRUD de pedidos para fornecedores
@@ -129,7 +135,26 @@ lumine_saas/
   - Melhor dia/horário de vendas
   - Combos frequentes (produtos vendidos juntos)
 
-### 9. Auditoria (`/api/audit/*`)
+### 9. Clientes (`/api/customers/*`)
+- CRUD com soft delete e busca por nome/telefone/CPF (searchText normalizado,
+  inclui a versão só-dígitos para achar "11987654321" com o telefone formatado)
+- Ficha com histórico de compras, parcelas e saldo devedor
+- Não é possível remover cliente com parcela em aberto
+- No PDV o cliente é opcional e pode ser cadastrado sem sair da venda
+
+### 10. Crediário (`/api/crediario/*`)
+- Venda no crediário gera parcelas (`Installment`) dentro da mesma transação
+- **Divisão das parcelas:** `splitInstallments()` distribui os centavos que sobram
+  nas primeiras parcelas, senão R$ 100 em 3x fecharia 99,99. `monthlyDueDates()`
+  trata fim de mês — vencimento dia 31 cai no último dia de fevereiro em vez de
+  escorregar para março.
+- `GET /summary` — em aberto, em atraso, recebido no mês, nº de devedores
+- `GET /debtors` — agrupado por cliente, ordenado por quem tem mais atraso
+- `POST /:id/pay` — baixa da parcela (valor, forma e observação)
+- `POST /:id/reopen` — desfaz a baixa; exige `cancel_sale`
+- Crediário sempre exige cliente — sem ele não há de quem cobrar
+
+### 11. Auditoria (`/api/audit/*`)
 - Leitura do AuditLog, que já era gravado por todos os módulos mas não tinha consulta
 - `GET /api/audit` — paginado, filtros por ação, tipo de entidade, usuário e período
 - `GET /api/audit/facets` — contagem por dimensão para os dropdowns
@@ -137,7 +162,7 @@ lumine_saas/
   que realmente mudaram, mais o metadata bruto
 - Exige permissão `view_audit`
 
-### 10. Configurações (`/api/settings/*`)
+### 12. Configurações (`/api/settings/*`)
 - Perfil da loja (nome, logo, endereço)
 - CRUD de categorias e subcategorias
 - Estoque mínimo padrão

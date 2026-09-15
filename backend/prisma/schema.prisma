@@ -135,6 +135,7 @@ enum PaymentMethod {
   PIX
   DEBIT_CARD
   CREDIT_CARD
+  CREDIARIO
   MIXED
 }
 
@@ -147,6 +148,7 @@ model Sale {
   id              String        @id @default(cuid())
   saleNumber      Int           @unique @default(autoincrement()) @map("sale_number")
   userId          String        @map("user_id")
+  customerId      String?       @map("customer_id") // opcional — venda de balcão não exige cliente
   subtotal        Decimal       @db.Decimal(10, 2)
   discountAmount  Decimal       @default(0) @map("discount_amount") @db.Decimal(10, 2)
   discountPercent Decimal?      @map("discount_percent") @db.Decimal(5, 2)
@@ -160,13 +162,78 @@ model Sale {
   updatedAt       DateTime      @updatedAt @map("updated_at")
 
   user            User          @relation(fields: [userId], references: [id])
+  customer        Customer?     @relation(fields: [customerId], references: [id])
   items           SaleItem[]
   payments        SalePayment[]
+  installments    Installment[]
 
   @@index([createdAt])
   @@index([status])
   @@index([paymentMethod])
+  @@index([customerId])
   @@map("sales")
+}
+
+// ============================================================
+// CLIENTES & CREDIÁRIO
+// ============================================================
+
+model Customer {
+  id         String    @id @default(cuid())
+  name       String
+  phone      String?
+  email      String?
+  document   String?   // CPF
+  address    String?
+  notes      String?
+  active     Boolean   @default(true)
+  /// Nome/telefone/CPF normalizados para a busca do PDV
+  searchText String?   @map("search_text")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  deletedAt  DateTime? @map("deleted_at")
+
+  sales        Sale[]
+  installments Installment[]
+
+  @@index([name])
+  @@index([searchText])
+  @@index([deletedAt])
+  @@map("customers")
+}
+
+enum InstallmentStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+/// Parcela de crediário. Gerada na venda quando o pagamento é CREDIARIO
+/// (ou quando uma das formas do pagamento misto é crediário).
+model Installment {
+  id          String            @id @default(cuid())
+  saleId      String            @map("sale_id")
+  customerId  String            @map("customer_id")
+  number      Int               // 1, 2, 3...
+  totalCount  Int               @map("total_count") // total de parcelas da venda
+  amount      Decimal           @db.Decimal(10, 2)
+  dueDate     DateTime          @map("due_date")
+  status      InstallmentStatus @default(PENDING)
+  paidAt      DateTime?         @map("paid_at")
+  paidAmount  Decimal?          @map("paid_amount") @db.Decimal(10, 2)
+  paidMethod  PaymentMethod?    @map("paid_method")
+  notes       String?
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  sale        Sale              @relation(fields: [saleId], references: [id])
+  customer    Customer          @relation(fields: [customerId], references: [id])
+
+  @@index([customerId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([saleId])
+  @@map("installments")
 }
 
 model SaleItem {

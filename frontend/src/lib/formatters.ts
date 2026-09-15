@@ -37,6 +37,7 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   PIX: 'PIX',
   DEBIT_CARD: 'Cartão de Débito',
   CREDIT_CARD: 'Cartão de Crédito',
+  CREDIARIO: 'Crediário',
   MIXED: 'Misto',
 };
 

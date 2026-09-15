@@ -3,6 +3,7 @@ import { UserRole } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError, NotFoundError } from '../../shared/errors/AppError';
 import { createAuditLog } from '../../shared/utils/auditLog';
+import { planInstallments } from '../crediario/helpers';
 import type { CreateSaleInput, CancelSaleInput, ListSalesInput } from './validator';
 
 export async function listSales(params: ListSalesInput) {
@@ -158,8 +159,60 @@ export async function createSale(
     return acc + Math.max(0, itemTotal);
   }, 0);
 
-  const discountAmount = input.discountAmount ?? 0;
+  // Desconto: percentual tem prioridade quando informado, e o valor em reais é
+  // derivado dele. Guardar os dois deixa o histórico legível ("10% = R$ 30,00").
+  const discountAmount =
+    input.discountPercent !== undefined && input.discountPercent > 0
+      ? Math.round(subtotal * (input.discountPercent / 100) * 100) / 100
+      : (input.discountAmount ?? 0);
+
+  if (discountAmount > subtotal) {
+    throw new AppError('O desconto não pode ser maior que o subtotal', 400);
+  }
+
   const total = Math.max(0, subtotal - discountAmount);
+
+  // Pagamento misto: a soma das formas precisa fechar com o total da venda.
+  // Sem esta checagem a venda entrava com valores que não batiam com o caixa.
+  if (input.paymentMethod === 'MIXED') {
+    const somaPagamentos = (input.payments ?? []).reduce((acc, p) => acc + p.amount, 0);
+    if (Math.abs(somaPagamentos - total) > 0.005) {
+      throw new AppError(
+        `A soma das formas de pagamento (${somaPagamentos.toFixed(2)}) não confere ` +
+          `com o total da venda (${total.toFixed(2)})`,
+        400
+      );
+    }
+  }
+
+  // Quanto da venda vai para o crediário
+  const crediarioAmount =
+    input.paymentMethod === 'CREDIARIO'
+      ? total
+      : (input.payments ?? [])
+          .filter((p) => p.method === 'CREDIARIO')
+          .reduce((acc, p) => acc + p.amount, 0);
+
+  const usaCrediario = crediarioAmount > 0;
+
+  if (usaCrediario && !input.customerId) {
+    throw new AppError('Venda no crediário exige um cliente', 400);
+  }
+
+  let plano: ReturnType<typeof planInstallments> = [];
+  if (usaCrediario) {
+    const count = input.crediarioCount ?? 1;
+    // Sem data informada, a primeira parcela vence em 30 dias
+    const firstDue = input.crediarioFirstDueDate
+      ? new Date(`${input.crediarioFirstDueDate}T12:00:00`)
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    if (isNaN(firstDue.getTime())) {
+      throw new AppError('Data de vencimento inválida', 400);
+    }
+
+    plano = planInstallments(crediarioAmount, count, firstDue);
+  }
 
   // Executar em transação atômica
   const sale = await prisma.$transaction(async (tx) => {
@@ -167,6 +220,7 @@ export async function createSale(
     const newSale = await tx.sale.create({
       data: {
         userId,
+        customerId: input.customerId,
         subtotal,
         discountAmount,
         discountPercent: input.discountPercent,
@@ -194,7 +248,8 @@ export async function createSale(
             ? input.payments.map((p) => ({
                 method: p.method,
                 amount: p.amount,
-                installments: p.method === 'CREDIT_CARD' ? (input.installments ?? 1) : 1,
+                installments:
+                  p.method === 'CREDIT_CARD' ? (p.installments ?? input.installments ?? 1) : 1,
               }))
             : [{
                 method: input.paymentMethod,
@@ -208,6 +263,21 @@ export async function createSale(
         payments: true,
       },
     });
+
+    // Parcelas do crediário — dentro da mesma transação da venda, senão pode
+    // sobrar venda sem parcela caso algo falhe no meio
+    if (plano.length > 0) {
+      await tx.installment.createMany({
+        data: plano.map((p) => ({
+          saleId: newSale.id,
+          customerId: input.customerId!,
+          number: p.number,
+          totalCount: p.totalCount,
+          amount: p.amount,
+          dueDate: p.dueDate,
+        })),
+      });
+    }
 
     // Baixa de estoque para cada item
     for (const item of input.items) {
@@ -231,6 +301,18 @@ export async function createSale(
       total,
       itemCount: input.items.length,
       ...(priceOverrides.length > 0 && { priceOverrides }),
+      ...(discountAmount > 0 && {
+        desconto: input.discountPercent
+          ? `${input.discountPercent}% (R$ ${discountAmount.toFixed(2)})`
+          : `R$ ${discountAmount.toFixed(2)}`,
+      }),
+      ...(usaCrediario && {
+        crediario: {
+          valor: crediarioAmount,
+          parcelas: plano.length,
+          primeiroVencimento: plano[0]?.dueDate,
+        },
+      }),
     } as object,
   });
 
