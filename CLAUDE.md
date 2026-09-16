@@ -51,7 +51,12 @@ lumine_saas/
   sku/nome/marca/tamanho/cor/barcode/descrição curta/categoria/público) mantido por
   `buildSearchText()` em TODO write (CRUD e import). Cada termo digitado precisa
   aparecer nele, então "sapatilha rosa EUA" e "brise 38" funcionam.
-- Filtros: categoria, marca, tamanho, cor, público, status, estoque baixo, faixa de preço
+- Filtros: categoria, marca, tamanho, cor, público, status, estoque baixo e **preço**
+- **Filtro de preço** tem três formas: faixas prontas com contagem (Até R$ 25,
+  R$ 25 a R$ 50, R$ 50 a R$ 80, R$ 80 a R$ 150, R$ 150 a R$ 300, acima de R$ 300),
+  intervalo livre, ou valor exato (`minPrice === maxPrice`, acha só quem custa
+  exatamente aquilo — ex: 2,30). As bordas usam `gt` no mínimo e `lte` no máximo,
+  então cada preço cai em exatamente uma faixa e R$ 25,00 fica em "Até R$ 25".
 - `GET /api/products/facets` — contagem por dimensão para os dropdowns. Cada facet
   ignora a própria dimensão (cross-filter estilo Power BI): escolher Categoria filtra
   as marcas disponíveis, mas o dropdown de Categoria continua listando todas.

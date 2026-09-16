@@ -21,6 +21,7 @@ import { Product } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { ProductFormDialog } from '@/components/products/ProductFormDialog';
 import { FilterSelect, FilterChip, FilterOption } from '@/components/ui/filter-select';
+import { PriceFilter, PriceBucket, PriceRange, describePriceRange } from '@/components/ui/price-filter';
 import { BulkEditPanel } from '@/components/products/BulkEditPanel';
 import { usePermission } from '@/hooks/usePermission';
 
@@ -44,6 +45,7 @@ interface Facets {
   audiences: Array<{ value: string; count: number }>;
   statuses: Array<{ value: string; count: number }>;
   priceRange: { min: number; max: number };
+  priceBuckets: PriceBucket[];
   lowStockCount: number;
 }
 
@@ -65,7 +67,13 @@ function ProductsPageContent() {
     categoryId: '', brand: '', size: '', color: '',
     audience: '', status: '', lowStock: '',
   });
+  const [price, setPrice] = useState<PriceRange>({});
   const [page, setPage] = useState(1);
+
+  function setPriceRange(range: PriceRange) {
+    setPrice(range);
+    setPage(1);
+  }
 
   function setFilter(key: keyof typeof filters, value: string) {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -74,6 +82,7 @@ function ProductsPageContent() {
 
   function clearFilters() {
     setFilters({ categoryId: '', brand: '', size: '', color: '', audience: '', status: '', lowStock: '' });
+    setPrice({});
     setSearch('');
     setPage(1);
   }
@@ -82,9 +91,12 @@ function ProductsPageContent() {
   const filterParams = new URLSearchParams();
   if (search) filterParams.set('search', search);
   Object.entries(filters).forEach(([k, v]) => { if (v) filterParams.set(k, v); });
+  if (price.min !== undefined) filterParams.set('minPrice', String(price.min));
+  if (price.max !== undefined) filterParams.set('maxPrice', String(price.max));
   const filterKey = filterParams.toString();
 
-  const activeCount = Object.values(filters).filter(Boolean).length;
+  const precoAtivo = price.min !== undefined || price.max !== undefined;
+  const activeCount = Object.values(filters).filter(Boolean).length + (precoAtivo ? 1 : 0);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -260,6 +272,12 @@ function ProductsPageContent() {
             options={asOptions(facets?.statuses, STATUS_LABELS)}
           />
 
+          <PriceFilter
+            value={price}
+            onChange={setPriceRange}
+            buckets={facets?.priceBuckets ?? []}
+          />
+
           <button
             type="button"
             onClick={() => setFilter('lowStock', filters.lowStock ? '' : 'true')}
@@ -311,6 +329,13 @@ function ProductsPageContent() {
                 label="Status"
                 value={STATUS_LABELS[filters.status] ?? filters.status}
                 onRemove={() => setFilter('status', '')}
+              />
+            )}
+            {precoAtivo && (
+              <FilterChip
+                label="Preço"
+                value={describePriceRange(price)}
+                onRemove={() => setPriceRange({})}
               />
             )}
             {filters.lowStock && (

@@ -329,6 +329,22 @@ function toFacetList(
     .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value, 'pt-BR'));
 }
 
+/**
+ * Faixas de preço para o filtro.
+ *
+ * Limites pensados para o catálogo da loja (meia, collant, sapatilha, sapato).
+ * A borda superior é inclusiva — "Até R$ 25" pega o produto de exatamente
+ * R$ 25,00, que é como a pessoa pensa ao filtrar por preço.
+ */
+const PRICE_BUCKETS: Array<{ id: string; label: string; min?: number; max?: number }> = [
+  { id: '0-25',    label: 'Até R$ 25',        max: 25 },
+  { id: '25-50',   label: 'R$ 25 a R$ 50',    min: 25,  max: 50 },
+  { id: '50-80',   label: 'R$ 50 a R$ 80',    min: 50,  max: 80 },
+  { id: '80-150',  label: 'R$ 80 a R$ 150',   min: 80,  max: 150 },
+  { id: '150-300', label: 'R$ 150 a R$ 300',  min: 150, max: 300 },
+  { id: '300+',    label: 'Acima de R$ 300',  min: 300 },
+];
+
 export async function getProductFacets(filters: FacetFilters) {
   const [
     byCategory, byBrand, bySize, byColor, byAudience, byStatus,
@@ -376,6 +392,27 @@ export async function getProductFacets(filters: FacetFilters) {
     prisma.product.count({ where: buildFacetWhere(filters) }),
   ]);
 
+  // Contagem por faixa de preço. Usa o where SEM o filtro de preço, senão ao
+  // escolher uma faixa as outras zerariam e não daria para trocar.
+  const wherePreco = buildFacetWhere(filters, 'price');
+  const priceBuckets = await Promise.all(
+    PRICE_BUCKETS.map(async (b) => ({
+      id: b.id,
+      label: b.label,
+      min: b.min,
+      max: b.max,
+      count: await prisma.product.count({
+        where: {
+          ...wherePreco,
+          salePrice: {
+            ...(b.min !== undefined && { gt: b.min }),
+            ...(b.max !== undefined && { lte: b.max }),
+          },
+        },
+      }),
+    }))
+  );
+
   // Nomes das categorias que apareceram no groupBy
   const categoryIds = byCategory.map((c) => c.categoryId);
   const categories = await prisma.category.findMany({
@@ -402,6 +439,7 @@ export async function getProductFacets(filters: FacetFilters) {
       min: priceAgg._min.salePrice ? Number(priceAgg._min.salePrice) : 0,
       max: priceAgg._max.salePrice ? Number(priceAgg._max.salePrice) : 0,
     },
+    priceBuckets,
     lowStockCount: Number(lowStockCount[0]?.count ?? 0),
   };
 }
