@@ -9,8 +9,11 @@ import {
   softDeleteProduct,
   bulkUpdateProducts,
   getProductFacets,
+  getStockValue,
+  listAllProductsForExport,
 } from './service';
 import { sendSuccess, sendPaginated } from '../../shared/utils/response';
+import { canViewCostPrice } from '../../middleware/requirePermission';
 
 export async function index(req: Request, res: Response, next: NextFunction) {
   try {
@@ -88,6 +91,116 @@ export async function facets(req: Request, res: Response, next: NextFunction) {
   try {
     const result = await getProductFacets(req.query as unknown as Parameters<typeof getProductFacets>[0]);
     return sendSuccess(res, result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function stockValue(req: Request, res: Response, next: NextFunction) {
+  try {
+    // Custo e lucro só para quem tem permissão de ver custo
+    const includeCost = await canViewCostPrice(req);
+    return sendSuccess(res, await getStockValue(includeCost));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Exporta os produtos em .xlsx respeitando os filtros da tela.
+ *
+ * As colunas base são as MESMAS do template de import, então o arquivo
+ * exportado pode ser editado e reimportado. As colunas de conferência
+ * (estoque mínimo, valor total, status) vão depois, e o import ignora o que
+ * não reconhece.
+ */
+export async function exportProducts(req: Request, res: Response, next: NextFunction) {
+  try {
+    const xlsx = await import('xlsx');
+    const includeCost = await canViewCostPrice(req);
+
+    const produtos = await listAllProductsForExport(
+      req.query as unknown as Parameters<typeof listAllProductsForExport>[0]
+    );
+
+    const header = [
+      'sku', 'nome', 'quantidade', 'preco_venda',
+      ...(includeCost ? ['preco_custo'] : []),
+      'categoria', 'marca', 'tamanho', 'cor', 'publico',
+      'descricao_curta', 'descricao', 'barcode',
+      'estoque_minimo', 'status',
+      'valor_total_venda',
+      ...(includeCost ? ['valor_total_custo', 'lucro_potencial'] : []),
+    ];
+
+    const linhas = produtos.map((p) => {
+      const qtd = p.quantity;
+      const venda = Number(p.salePrice);
+      const custo = Number(p.costPrice);
+      return [
+        p.sku,
+        p.name,
+        qtd,
+        venda,
+        ...(includeCost ? [custo] : []),
+        p.category?.name ?? '',
+        p.brand ?? '',
+        p.size ?? '',
+        p.color ?? '',
+        p.audience === 'ADULTO' ? 'Adulto' : p.audience === 'INFANTIL' ? 'Infantil' : '',
+        p.shortDescription ?? '',
+        p.description ?? '',
+        p.barcode ?? '',
+        p.minStock,
+        p.status === 'ACTIVE' ? 'Ativo' : p.status === 'INACTIVE' ? 'Inativo' : 'Descontinuado',
+        Math.round(venda * qtd * 100) / 100,
+        ...(includeCost
+          ? [
+              Math.round(custo * qtd * 100) / 100,
+              Math.round((venda - custo) * qtd * 100) / 100,
+            ]
+          : []),
+      ];
+    });
+
+    // Linha de totais no fim, para conferir sem precisar somar na mão
+    const somaCol = (idx: number) =>
+      linhas.reduce((acc, l) => acc + (typeof l[idx] === 'number' ? (l[idx] as number) : 0), 0);
+
+    const idxQtd = header.indexOf('quantidade');
+    const idxValorVenda = header.indexOf('valor_total_venda');
+    const idxValorCusto = header.indexOf('valor_total_custo');
+    const idxLucro = header.indexOf('lucro_potencial');
+
+    const totais = header.map((_, i) => {
+      if (i === 0) return 'TOTAL';
+      if (i === idxQtd) return somaCol(idxQtd);
+      if (i === idxValorVenda) return Math.round(somaCol(idxValorVenda) * 100) / 100;
+      if (includeCost && i === idxValorCusto) return Math.round(somaCol(idxValorCusto) * 100) / 100;
+      if (includeCost && i === idxLucro) return Math.round(somaCol(idxLucro) * 100) / 100;
+      return '';
+    });
+
+    const ws = xlsx.utils.aoa_to_sheet([header, ...linhas, [], totais]);
+
+    ws['!cols'] = header.map((h) => {
+      if (h === 'nome') return { wch: 34 };
+      if (h === 'descricao') return { wch: 50 };
+      if (h === 'descricao_curta') return { wch: 32 };
+      if (h === 'categoria' || h === 'marca') return { wch: 18 };
+      return { wch: 14 };
+    });
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+
+    const wb = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(wb, ws, 'Produtos');
+
+    const buffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const data = new Date().toISOString().slice(0, 10);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="produtos-lumine-${data}.xlsx"`);
+    res.send(buffer);
   } catch (err) {
     next(err);
   }

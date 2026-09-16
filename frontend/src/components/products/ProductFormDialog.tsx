@@ -112,15 +112,15 @@ export function ProductFormDialog({ open, onOpenChange, product }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => onOpenChange(false)} />
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b border-lumine-lavender-pale">
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90dvh] overflow-y-auto">
+        <div className="p-4 sm:p-6 border-b border-lumine-lavender-pale">
           <h2 className="font-heading text-xl text-lumine-sage-dark">
             {isEdit ? 'Editar Produto' : 'Novo Produto'}
           </h2>
         </div>
 
-        <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+        <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="p-4 sm:p-6 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>SKU *</Label>
               <Input {...register('sku')} placeholder="SKU-001" disabled={isEdit} />
@@ -153,7 +153,7 @@ export function ProductFormDialog({ open, onOpenChange, product }: Props) {
             {errors.categoryId && <p className="text-xs text-lumine-danger">{errors.categoryId.message}</p>}
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1.5">
               <Label>Preço de Custo (R$)</Label>
               <Input {...register('costPrice')} type="number" step="0.01" placeholder="0,00" />
@@ -169,7 +169,7 @@ export function ProductFormDialog({ open, onOpenChange, product }: Props) {
             </div>
           </div>
 
-          <div className="grid grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             <div className="space-y-1.5">
               <Label>Est. Mínimo</Label>
               <Input {...register('minStock')} type="number" placeholder="5" />

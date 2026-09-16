@@ -3,7 +3,7 @@ import { authenticate } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { requirePermission } from '../../middleware/requirePermission';
 import {
-  index, lowStock, show, history, create, update, destroy, bulkUpdate, downloadTemplate, facets,
+  index, lowStock, show, history, create, update, destroy, bulkUpdate, downloadTemplate, facets, stockValue, exportProducts,
 } from './controller';
 import {
   createProductSchema, updateProductSchema, bulkUpdateSchema, listProductsSchema,
@@ -17,6 +17,8 @@ router.get('/template', downloadTemplate);
 
 router.use(authenticate);
 router.get('/low-stock', lowStock);
+router.get('/stock-value', stockValue);
+router.get('/export', validate(productFacetsSchema, 'query'), exportProducts);
 router.get('/facets', validate(productFacetsSchema, 'query'), facets);
 router.get('/', validate(listProductsSchema, 'query'), index);
 router.get('/:id', show);

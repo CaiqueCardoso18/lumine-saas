@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import {
   TrendingUp, Package, ShoppingCart, AlertTriangle,
-  Plus, Upload, ArrowRight,
+  Plus, Upload, ArrowRight, Wallet, Coins, Boxes,
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -14,9 +14,25 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
-import { formatCurrency, formatDate, formatDateTime } from '@/lib/formatters';
+import { formatCurrency, formatDate, formatDateTime, formatNumber } from '@/lib/formatters';
 
 const fadeIn = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } };
+
+interface StockValue {
+  productCount: number;
+  totalUnits: number;
+  totalAtSale: number;
+  /** Só vem para quem tem permissão de ver custo */
+  totalAtCost?: number;
+  potentialProfit?: number;
+  marginPercent?: number;
+  lowStockCount: number;
+  outOfStockCount: number;
+  categories: Array<{
+    categoryId: string; name: string; products: number;
+    units: number; atSale: number; atCost?: number;
+  }>;
+}
 
 function KPICard({
   title, value, subtitle, icon: Icon, color, delay = 0,
@@ -77,7 +93,16 @@ export default function DashboardPage() {
     }>>('/api/products/low-stock'),
   });
 
+  const { data: stockValueRes } = useQuery({
+    queryKey: ['products', 'stock-value'],
+    queryFn: () => api.get<StockValue>('/api/products/stock-value'),
+  });
+
   const s = summary?.data;
+  const stock = stockValueRes?.data;
+  // O backend só devolve custo para quem tem view_cost_price, então a presença
+  // do campo já é a autorização — não precisa checar permissão de novo aqui.
+  const podeVerCusto = stock?.totalAtCost !== undefined;
   const chartData = revenue?.data?.chart ?? [];
   const sales = recentSales?.data ?? [];
   const lowStockItems = lowStock?.data ?? [];
@@ -124,6 +149,113 @@ export default function DashboardPage() {
           delay={0.24}
         />
       </div>
+
+      {/* Dinheiro parado em estoque */}
+      <motion.div variants={fadeIn} transition={{ delay: 0.28 }}>
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Dinheiro em estoque</CardTitle>
+              <span className="text-xs text-lumine-warm-gray">
+                {formatNumber(stock?.totalUnits ?? 0)} peça(s) em{' '}
+                {formatNumber(stock?.productCount ?? 0)} produto(s)
+              </span>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className={`grid gap-4 ${podeVerCusto ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+              {podeVerCusto && (
+                <div className="rounded-xl border border-lumine-lavender-pale p-4">
+                  <div className="flex items-center gap-2 text-lumine-warm-gray mb-1">
+                    <Coins size={14} />
+                    <span className="text-xs">Investido (a custo)</span>
+                  </div>
+                  <p className="text-2xl font-heading font-semibold text-lumine-charcoal">
+                    {formatCurrency(stock?.totalAtCost ?? 0)}
+                  </p>
+                  <p className="text-xs text-lumine-warm-gray mt-1">
+                    capital parado na loja
+                  </p>
+                </div>
+              )}
+
+              <div className="rounded-xl border border-lumine-lavender-pale p-4">
+                <div className="flex items-center gap-2 text-lumine-warm-gray mb-1">
+                  <Wallet size={14} />
+                  <span className="text-xs">A preço de venda</span>
+                </div>
+                <p className="text-2xl font-heading font-semibold text-lumine-gold">
+                  {formatCurrency(stock?.totalAtSale ?? 0)}
+                </p>
+                <p className="text-xs text-lumine-warm-gray mt-1">
+                  se vender tudo que está em estoque
+                </p>
+              </div>
+
+              {podeVerCusto ? (
+                <div className="rounded-xl border border-lumine-lavender-pale p-4">
+                  <div className="flex items-center gap-2 text-lumine-warm-gray mb-1">
+                    <TrendingUp size={14} />
+                    <span className="text-xs">Lucro potencial</span>
+                  </div>
+                  <p className="text-2xl font-heading font-semibold text-lumine-success">
+                    {formatCurrency(stock?.potentialProfit ?? 0)}
+                  </p>
+                  <p className="text-xs text-lumine-warm-gray mt-1">
+                    margem de {stock?.marginPercent ?? 0}%
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-lumine-lavender-pale p-4">
+                  <div className="flex items-center gap-2 text-lumine-warm-gray mb-1">
+                    <Boxes size={14} />
+                    <span className="text-xs">Sem estoque</span>
+                  </div>
+                  <p className="text-2xl font-heading font-semibold text-lumine-charcoal">
+                    {stock?.outOfStockCount ?? 0}
+                  </p>
+                  <p className="text-xs text-lumine-warm-gray mt-1">produto(s) zerados</p>
+                </div>
+              )}
+            </div>
+
+            {/* Quebra por categoria — as 5 que concentram mais dinheiro */}
+            {stock && stock.categories.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-lumine-lavender-pale">
+                <p className="text-xs uppercase tracking-wide text-lumine-warm-gray mb-2">
+                  Onde está o dinheiro
+                </p>
+                <div className="space-y-1.5">
+                  {stock.categories.slice(0, 5).map((c) => {
+                    const pct = stock.totalAtSale > 0
+                      ? (c.atSale / stock.totalAtSale) * 100
+                      : 0;
+                    return (
+                      <div key={c.categoryId} className="flex items-center gap-3">
+                        <span className="text-sm text-lumine-charcoal w-40 truncate shrink-0">
+                          {c.name}
+                        </span>
+                        <div className="flex-1 h-2 bg-lumine-lavender-pale rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-lumine-lavender rounded-full"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className="text-sm text-lumine-charcoal w-28 text-right shrink-0">
+                          {formatCurrency(c.atSale)}
+                        </span>
+                        <span className="text-xs text-lumine-warm-gray w-12 text-right shrink-0">
+                          {pct.toFixed(0)}%
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
 
       {/* Quick Actions */}
       <motion.div variants={fadeIn} transition={{ delay: 0.3 }}>

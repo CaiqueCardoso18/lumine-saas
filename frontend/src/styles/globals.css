@@ -96,3 +96,48 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #B8A9C9;
 }
+
+/* ─── Correções de iOS / mobile ─────────────────────────────── */
+
+/**
+ * O Safari do iPhone dá zoom automático ao focar qualquer campo com fonte
+ * menor que 16px. Esse zoom é o que desloca e "corta" a tela — foi o que
+ * acontecia ao abrir Nova Venda no iPhone.
+ *
+ * Forçar 16px nos campos em telas pequenas resolve sem precisar bloquear o
+ * zoom manual (que prejudicaria quem precisa ampliar para enxergar).
+ */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/**
+ * Altura real da janela no mobile.
+ *
+ * 100vh no iOS inclui a barra de endereço, então o rodapé de um dialog
+ * fullscreen (o botão Finalizar Venda) caía fora da área visível. A unidade
+ * dvh acompanha a barra e o teclado; o vh fica como fallback para navegadores
+ * antigos, na ordem em que o CSS sobrescreve.
+ */
+.h-screen-safe {
+  height: 100vh;
+  height: 100dvh;
+}
+
+.max-h-screen-safe {
+  max-height: 100vh;
+  max-height: 100dvh;
+}
+
+/* Respiro para o notch e o indicador de home do iPhone */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}

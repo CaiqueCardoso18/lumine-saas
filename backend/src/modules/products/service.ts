@@ -406,3 +406,135 @@ export async function getProductFacets(filters: FacetFilters) {
   };
 }
 
+// ─── Valor do estoque ────────────────────────────────────────
+
+/**
+ * Quanto de dinheiro está parado no estoque.
+ *
+ * Dois olhares sobre o mesmo estoque:
+ * - a CUSTO: o que a loja pagou, ou seja o capital imobilizado
+ * - a VENDA: o que entra se vender tudo
+ * A diferença é o lucro potencial. Custo e lucro só vão na resposta para quem
+ * tem `view_cost_price` — margem é informação do dono.
+ */
+export async function getStockValue(includeCost: boolean) {
+  const produtos = await prisma.product.findMany({
+    where: { deletedAt: null, status: 'ACTIVE' },
+    select: {
+      quantity: true,
+      costPrice: true,
+      salePrice: true,
+      minStock: true,
+      categoryId: true,
+      category: { select: { name: true } },
+    },
+  });
+
+  let totalUnits = 0;
+  let totalAtSale = 0;
+  let totalAtCost = 0;
+  let lowStockCount = 0;
+  let outOfStockCount = 0;
+
+  const porCategoria = new Map<string, {
+    name: string; units: number; atSale: number; atCost: number; products: number;
+  }>();
+
+  for (const p of produtos) {
+    const qtd = p.quantity;
+    const venda = Number(p.salePrice) * qtd;
+    const custo = Number(p.costPrice) * qtd;
+
+    totalUnits += qtd;
+    totalAtSale += venda;
+    totalAtCost += custo;
+    if (qtd === 0) outOfStockCount++;
+    else if (qtd <= p.minStock) lowStockCount++;
+
+    const entry = porCategoria.get(p.categoryId) ?? {
+      name: p.category.name, units: 0, atSale: 0, atCost: 0, products: 0,
+    };
+    entry.units += qtd;
+    entry.atSale += venda;
+    entry.atCost += custo;
+    entry.products += 1;
+    porCategoria.set(p.categoryId, entry);
+  }
+
+  const round = (n: number) => Math.round(n * 100) / 100;
+
+  const categorias = Array.from(porCategoria.entries())
+    .map(([id, c]) => ({
+      categoryId: id,
+      name: c.name,
+      products: c.products,
+      units: c.units,
+      atSale: round(c.atSale),
+      ...(includeCost && { atCost: round(c.atCost) }),
+    }))
+    .sort((a, b) => b.atSale - a.atSale);
+
+  return {
+    productCount: produtos.length,
+    totalUnits,
+    totalAtSale: round(totalAtSale),
+    ...(includeCost && {
+      totalAtCost: round(totalAtCost),
+      potentialProfit: round(totalAtSale - totalAtCost),
+      // Margem sobre o preço de venda, que é como a loja costuma pensar
+      marginPercent: totalAtSale > 0
+        ? round(((totalAtSale - totalAtCost) / totalAtSale) * 100)
+        : 0,
+    }),
+    lowStockCount,
+    outOfStockCount,
+    categories: categorias,
+  };
+}
+
+/**
+ * Todos os produtos que batem com os filtros, sem paginação — para o export.
+ *
+ * Reusa exatamente o mesmo `where` da listagem, então o que você vê na tela
+ * filtrada é o que sai na planilha.
+ */
+export async function listAllProductsForExport(params: FacetFilters) {
+  const {
+    search, categoryId, subcategoryId, status, audience,
+    brand, size, color, minPrice, maxPrice, lowStock,
+  } = params;
+
+  const baseWhere: Prisma.ProductWhereInput = {
+    deletedAt: null,
+    ...(status && { status }),
+    ...(categoryId && { categoryId }),
+    ...(subcategoryId && { subcategoryId }),
+    ...(audience && { audience }),
+    ...(brand && { brand }),
+    ...(size && { size }),
+    ...(color && { color }),
+    ...((minPrice !== undefined || maxPrice !== undefined) && {
+      salePrice: {
+        ...(minPrice !== undefined && { gte: minPrice }),
+        ...(maxPrice !== undefined && { lte: maxPrice }),
+      },
+    }),
+    ...(search && {
+      AND: searchTerms(search).map((term) => ({ searchText: { contains: term } })),
+    }),
+  };
+
+  let where: Prisma.ProductWhereInput = baseWhere;
+  if (lowStock) {
+    const baixos = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM products WHERE deleted_at IS NULL AND quantity <= min_stock
+    `;
+    where = { ...baseWhere, id: { in: baixos.map((p) => p.id) } };
+  }
+
+  return prisma.product.findMany({
+    where,
+    orderBy: [{ category: { name: 'asc' } }, { name: 'asc' }, { size: 'asc' }],
+    include: { category: { select: { name: true } } },
+  });
+}

@@ -11,6 +11,11 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: '#B8A9C9',
+  width: 'device-width',
+  initialScale: 1,
+  // viewportFit cover deixa o app usar a área do notch e do indicador do iPhone;
+  // o padding de segurança vem das utilidades .pb-safe / .pt-safe no globals.css
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

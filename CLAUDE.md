@@ -62,6 +62,14 @@ lumine_saas/
   roda update individual dentro de uma transação.
 - Histórico de alterações via AuditLog
 - Endpoint de estoque baixo (`/api/products/low-stock`)
+- `GET /api/products/stock-value` — dinheiro parado em estoque: a custo (capital
+  imobilizado), a preço de venda, lucro potencial e quebra por categoria. Custo e
+  lucro só entram na resposta para quem tem `view_cost_price` — a ausência do
+  campo É a autorização, o frontend não precisa checar de novo.
+- `GET /api/products/export` — exporta .xlsx com os MESMOS filtros da listagem.
+  As colunas base são as do template de import, então o arquivo pode ser editado
+  e reimportado; as colunas de conferência (valor total, status) vêm depois e o
+  import ignora o que não reconhece. Tem linha de TOTAL no fim.
 
 ### 3. Upload de Planilha (`/api/upload/*`)
 - **Flow crítico:**

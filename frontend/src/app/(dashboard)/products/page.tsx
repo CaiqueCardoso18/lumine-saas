@@ -7,7 +7,7 @@ import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Search, Download, Edit, Trash2, AlertTriangle, Package,
-  CheckSquare, Square, X, Tag, BarChart2, SlidersHorizontal,
+  CheckSquare, Square, X, Tag, BarChart2, SlidersHorizontal, FileDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/formatters';
 import { downloadTemplate } from '@/lib/downloadTemplate';
+import { exportProducts } from '@/lib/exportProducts';
 import { Product } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { ProductFormDialog } from '@/components/products/ProductFormDialog';
@@ -180,6 +181,15 @@ function ProductsPageContent() {
           )}
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportProducts(filterKey)}
+            title="Baixa os produtos que estão na tela, com os filtros aplicados"
+          >
+            <FileDown size={14} className="mr-2" />
+            Exportar
+          </Button>
           <Button variant="outline" size="sm" onClick={downloadTemplate}>
             <Download size={14} className="mr-2" />
             Template

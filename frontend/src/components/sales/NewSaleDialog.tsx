@@ -213,9 +213,9 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
       />
 
       {/* Full-screen no celular; card centralizado no desktop */}
-      <div className="relative bg-white w-full sm:max-w-4xl sm:rounded-2xl shadow-xl flex flex-col h-full sm:h-[90vh] overflow-hidden">
+      <div className="relative bg-white w-full sm:max-w-4xl sm:rounded-2xl shadow-xl flex flex-col h-screen-safe sm:h-[90vh] overflow-hidden">
         {/* Cabeçalho */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-lumine-lavender-pale shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-lumine-lavender-pale shrink-0 pt-safe sm:pt-3">
           <h2 className="font-heading text-lg sm:text-xl text-lumine-sage-dark">Nova Venda</h2>
           <button
             onClick={() => onOpenChange(false)}
@@ -439,7 +439,7 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
             </div>
 
             {/* Rodapé: cliente, pagamento e total */}
-            <div className="p-3 sm:p-4 border-t border-lumine-lavender-pale space-y-3 shrink-0 max-h-[55vh] overflow-y-auto">
+            <div className="p-3 sm:p-4 border-t border-lumine-lavender-pale space-y-3 shrink-0 max-h-[55dvh] overflow-y-auto pb-safe">
               <CustomerPicker value={customer} onChange={setCustomer} required={precisaCliente} />
 
               <PaymentPanel
