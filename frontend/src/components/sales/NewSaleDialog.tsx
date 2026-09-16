@@ -341,7 +341,14 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
               mobileView === 'cart' ? 'flex' : 'hidden'
             } sm:flex`}
           >
-            <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2">
+            {/*
+              No celular itens e pagamento ficam no MESMO scroll. Antes eram dois
+              containers roláveis aninhados (lista + rodapé), e com o crediário
+              aberto o formulário não subia: a lista ocupava o espaço e o rodapé
+              rolava por dentro, cortando os campos.
+            */}
+            <div className="flex-1 overflow-y-auto overscroll-contain">
+            <div className="p-3 sm:p-4 space-y-2 sm:flex-1 sm:overflow-y-auto">
               {cart.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-lumine-warm-gray py-10">
                   <ShoppingCart size={28} strokeWidth={1} className="mb-2 opacity-50" />
@@ -438,8 +445,8 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
               )}
             </div>
 
-            {/* Rodapé: cliente, pagamento e total */}
-            <div className="p-3 sm:p-4 border-t border-lumine-lavender-pale space-y-3 shrink-0 max-h-[55dvh] overflow-y-auto pb-safe">
+            {/* Cliente, pagamento e total */}
+            <div className="p-3 sm:p-4 border-t border-lumine-lavender-pale space-y-3 sm:shrink-0 sm:max-h-[55dvh] sm:overflow-y-auto">
               <CustomerPicker value={customer} onChange={setCustomer} required={precisaCliente} />
 
               <PaymentPanel
@@ -495,16 +502,14 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
                 </div>
               </div>
 
-              <Button
-                className="w-full"
-                size="lg"
-                disabled={!podeFinalizar || mutation.isPending}
-                onClick={() => mutation.mutate()}
-              >
-                {mutation.isPending && <Loader2 size={16} className="animate-spin mr-2" />}
-                Finalizar Venda
-              </Button>
+            </div>
+            </div>
 
+            {/*
+              Botão fica FORA do scroll, colado no rodapé. Assim continua
+              alcançável mesmo com o crediário aberto e o teclado na tela.
+            */}
+            <div className="p-3 sm:p-4 border-t border-lumine-lavender-pale shrink-0 bg-white pb-safe space-y-2">
               {!podeFinalizar && cart.length > 0 && (
                 <p className="text-xs text-lumine-danger text-center">
                   {precisaCliente && !customer
@@ -514,6 +519,23 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
                       : ''}
                 </p>
               )}
+
+              <div className="flex items-center justify-between sm:hidden">
+                <span className="text-sm text-lumine-warm-gray">Total</span>
+                <span className="font-heading font-bold text-lg text-lumine-gold">
+                  {formatCurrency(total)}
+                </span>
+              </div>
+
+              <Button
+                className="w-full"
+                size="lg"
+                disabled={!podeFinalizar || mutation.isPending}
+                onClick={() => mutation.mutate()}
+              >
+                {mutation.isPending && <Loader2 size={16} className="animate-spin mr-2" />}
+                Finalizar Venda
+              </Button>
             </div>
           </div>
         </div>

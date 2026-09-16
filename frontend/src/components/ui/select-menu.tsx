@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -19,16 +20,21 @@ interface Props {
   placeholder?: string;
   disabled?: boolean;
   className?: string;
-  /** Abre a lista para cima — use quando o campo fica no rodapé de um dialog */
+  /**
+   * @deprecated A direção agora é decidida sozinha pelo espaço disponível.
+   * Mantido só para não quebrar quem já passa a prop.
+   */
   dropUp?: boolean;
 }
 
 /**
  * Dropdown de largura cheia na paleta da Lumine.
  *
- * Substitui o <select> nativo, que o navegador renderiza com a aparência do
- * sistema operacional (cantos retos, fonte própria) e não acompanha o resto
- * da interface.
+ * A lista é renderizada num portal com `position: fixed`. Isso é essencial:
+ * dentro do rodapé do PDV — que tem `overflow-y-auto` — uma lista posicionada
+ * com `absolute` era RECORTADA pelo container e ficava inalcançável, dando a
+ * impressão de campo travado. Em portal, nenhum overflow de ancestral atinge
+ * o menu.
  */
 export function SelectMenu({
   value,
@@ -37,34 +43,71 @@ export function SelectMenu({
   placeholder = 'Selecionar...',
   disabled = false,
   className,
-  dropUp = false,
 }: Props) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0, dropUp: false });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => setMounted(true), []);
+
+  const reposition = useCallback(() => {
+    const el = triggerRef.current;
+    if (!el) return;
+
+    const r = el.getBoundingClientRect();
+    const alturaMenu = Math.min(240, options.length * 40 + 16);
+    const espacoAbaixo = window.innerHeight - r.bottom;
+    // Só sobe se não couber embaixo E couber em cima
+    const dropUp = espacoAbaixo < alturaMenu + 12 && r.top > alturaMenu + 12;
+
+    setCoords({
+      top: dropUp ? r.top - 4 : r.bottom + 4,
+      left: r.left,
+      width: r.width,
+      dropUp,
+    });
+  }, [options.length]);
+
+  useLayoutEffect(() => {
+    if (open) reposition();
+  }, [open, reposition]);
 
   useEffect(() => {
     if (!open) return;
 
-    function onPointerDown(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    function onDown(e: MouseEvent | TouchEvent) {
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
     }
-    function onKeyDown(e: KeyboardEvent) {
+    function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') setOpen(false);
     }
 
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('touchstart', onDown);
+    document.addEventListener('keydown', onKey);
+    // Acompanha scroll e resize — inclusive o teclado do celular abrindo
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+
     return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('touchstart', onDown);
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
     };
-  }, [open]);
+  }, [open, reposition]);
 
   const selected = options.find((o) => o.value === value);
 
   return (
-    <div ref={ref} className={cn('relative', className)}>
+    <>
       <button
+        ref={triggerRef}
         type="button"
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
@@ -74,7 +117,8 @@ export function SelectMenu({
             ? 'border-lumine-lavender-pale text-lumine-warm-gray/60 cursor-not-allowed'
             : open
               ? 'border-lumine-lavender ring-2 ring-lumine-lavender/40 text-lumine-charcoal'
-              : 'border-lumine-lavender-pale text-lumine-charcoal hover:border-lumine-lavender'
+              : 'border-lumine-lavender-pale text-lumine-charcoal hover:border-lumine-lavender',
+          className
         )}
       >
         <span className={cn('truncate', !selected && 'text-lumine-warm-gray')}>
@@ -86,14 +130,20 @@ export function SelectMenu({
         />
       </button>
 
-      {open && (
+      {mounted && open && createPortal(
         <div
-          className={cn(
-            'absolute z-40 w-full bg-white border border-lumine-lavender-pale rounded-xl shadow-lg overflow-hidden',
-            dropUp ? 'bottom-full mb-1' : 'top-full mt-1'
-          )}
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            top: coords.top,
+            left: coords.left,
+            width: coords.width,
+            transform: coords.dropUp ? 'translateY(-100%)' : undefined,
+            zIndex: 80,
+          }}
+          className="bg-white border border-lumine-lavender-pale rounded-xl shadow-lg overflow-hidden"
         >
-          <div className="max-h-56 overflow-y-auto py-1">
+          <div className="max-h-56 overflow-y-auto py-1 overscroll-contain">
             {options.map((o) => (
               <button
                 key={o.value}
@@ -101,10 +151,10 @@ export function SelectMenu({
                 disabled={o.disabled}
                 onClick={() => { onChange(o.value); setOpen(false); }}
                 className={cn(
-                  'w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors',
+                  'w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left transition-colors',
                   o.disabled
                     ? 'text-lumine-warm-gray/50 cursor-not-allowed'
-                    : 'hover:bg-lumine-lavender-pale/40'
+                    : 'hover:bg-lumine-lavender-pale/40 active:bg-lumine-lavender-pale/60'
                 )}
               >
                 <span className="w-4 shrink-0">
@@ -124,8 +174,9 @@ export function SelectMenu({
               </button>
             ))}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }
