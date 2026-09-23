@@ -16,7 +16,15 @@ import {
  */
 export type StockMode = 'replace' | 'add';
 
-const REQUIRED_COLUMNS = ['sku', 'nome', 'quantidade', 'preco_venda'];
+/**
+ * Só sku e nome são exigidos na planilha.
+ *
+ * quantidade e preco_venda passaram a ser OPCIONAIS para permitir planilha
+ * parcial — por exemplo uma só de custo, que não deve encostar no estoque nem
+ * no preço de venda. Produto NOVO ainda precisa dos dois: não dá para criar
+ * um item sem preço.
+ */
+const REQUIRED_COLUMNS = ['sku', 'nome'];
 const OPTIONAL_COLUMNS = ['preco_custo', 'categoria', 'marca', 'tamanho', 'cor', 'publico', 'descricao', 'descricao_curta', 'barcode'];
 
 interface RawRow {
@@ -39,9 +47,10 @@ interface RawRow {
 interface ParsedRow {
   sku: string;
   name: string;
-  quantity: number;
-  salePrice: number;
-  costPrice: number;
+  /** undefined = coluna ausente na planilha, não mexer no valor atual */
+  quantity?: number;
+  salePrice?: number;
+  costPrice?: number;
   categoryName?: string;
   brand?: string;
   size?: string;
@@ -56,8 +65,9 @@ interface PreviewItem {
   row: number;
   sku: string;
   name: string;
-  quantity: number;
-  salePrice: number;
+  /** undefined = planilha não traz a coluna, o valor atual será mantido */
+  quantity?: number;
+  salePrice?: number;
   action: 'create' | 'update';
   /** Estoque final depois de aplicar o modo escolhido (replace ou add) */
   resultingQuantity?: number;
@@ -82,29 +92,50 @@ function parseRow(raw: RawRow, rowIndex: number): { data?: ParsedRow; error?: st
   if (!sku) return { error: `Linha ${rowIndex}: SKU é obrigatório` };
   if (!name) return { error: `Linha ${rowIndex}: Nome é obrigatório` };
 
-  const quantity = parseMoney(raw.quantidade as string | number);
-  if (isNaN(quantity) || quantity < 0) {
-    return {
-      error: `Linha ${rowIndex}: Quantidade inválida (recebido: "${raw.quantidade ?? ''}")`,
-    };
+  // Campo ausente (undefined) é diferente de campo com valor inválido:
+  // o primeiro significa "não mexer", o segundo é erro de digitação.
+  const temQtd = raw.quantidade !== undefined && raw.quantidade !== '';
+  const temVenda = raw.preco_venda !== undefined && raw.preco_venda !== '';
+  const temCusto = raw.preco_custo !== undefined && raw.preco_custo !== '';
+
+  let quantity: number | undefined;
+  if (temQtd) {
+    quantity = parseMoney(raw.quantidade as string | number);
+    if (isNaN(quantity) || quantity < 0) {
+      return {
+        error: `Linha ${rowIndex}: Quantidade inválida (recebido: "${raw.quantidade}")`,
+      };
+    }
+    quantity = Math.floor(quantity);
   }
 
-  const salePrice = parseMoney(raw.preco_venda as string | number);
-  if (isNaN(salePrice) || salePrice <= 0) {
-    return {
-      error: `Linha ${rowIndex}: Preço de venda inválido (recebido: "${raw.preco_venda ?? ''}")`,
-    };
+  let salePrice: number | undefined;
+  if (temVenda) {
+    salePrice = parseMoney(raw.preco_venda as string | number);
+    if (isNaN(salePrice) || salePrice <= 0) {
+      return {
+        error: `Linha ${rowIndex}: Preço de venda inválido (recebido: "${raw.preco_venda}")`,
+      };
+    }
   }
 
-  const costPrice = parseMoney(raw.preco_custo as string | number);
+  let costPrice: number | undefined;
+  if (temCusto) {
+    costPrice = parseMoney(raw.preco_custo as string | number);
+    if (isNaN(costPrice) || costPrice < 0) {
+      return {
+        error: `Linha ${rowIndex}: Preço de custo inválido (recebido: "${raw.preco_custo}")`,
+      };
+    }
+  }
 
   return {
     data: {
       sku,
       name,
-      quantity: Math.floor(quantity),
+      quantity,
       salePrice,
-      costPrice: isNaN(costPrice) || costPrice < 0 ? 0 : costPrice,
+      costPrice,
       categoryName: raw.categoria ? String(raw.categoria).trim() : undefined,
       brand: raw.marca ? String(raw.marca).trim() : undefined,
       size: raw.tamanho ? String(raw.tamanho).trim() : undefined,
@@ -159,11 +190,25 @@ export async function previewUpload(fileBuffer: Buffer, fileName: string, stockM
   });
   const existingMap = new Map(existingProducts.map((p) => [p.sku, p]));
 
+  // Produto novo sem preço de venda não pode ser criado — avisa no preview
+  for (const v of variants) {
+    if (!existingMap.has(v.variantSku) && v.salePrice === undefined) {
+      errors.push(
+        `Linha(s) ${v.sourceRows.join(', ')} — SKU ${v.variantSku}: produto novo ` +
+          `precisa de preco_venda (não existe no sistema para ser só atualizado)`
+      );
+    }
+  }
+
   const preview: PreviewItem[] = variants.map((v) => {
     const existing = existingMap.get(v.variantSku);
-    // No modo 'add' o estoque final é o atual + o da planilha
+    // Sem coluna de quantidade não há estoque resultante — o valor atual fica
     const resultingQuantity =
-      existing && stockMode === 'add' ? existing.quantity + v.quantity : v.quantity;
+      v.quantity === undefined
+        ? undefined
+        : existing && stockMode === 'add'
+          ? existing.quantity + v.quantity
+          : v.quantity;
     return {
       row: v.sourceRows[0],
       sku: v.variantSku,
@@ -259,15 +304,27 @@ export async function confirmUpload(fileBuffer: Buffer, fileName: string, userId
     try {
       const category = await resolveCategory(v.categoryName);
       const categoryId = category.id;
+
+      if (!existingMap.has(v.variantSku) && v.salePrice === undefined) {
+        errors.push(
+          `Linha(s) ${v.sourceRows.join(', ')} — SKU ${v.variantSku}: produto novo ` +
+            `precisa de preco_venda`
+        );
+        continue;
+      }
       const existing = existingMap.get(v.variantSku);
 
       if (existing) {
         await prisma.product.update({
           where: { id: existing.id },
           data: {
-            quantity: stockMode === 'add' ? existing.quantity + v.quantity : v.quantity,
-            salePrice: v.salePrice,
-            ...(v.costPrice && { costPrice: v.costPrice }),
+            // Campo ausente na planilha NÃO é alterado. É o que permite subir
+            // uma planilha só de custo sem zerar estoque e preço de venda.
+            ...(v.quantity !== undefined && {
+              quantity: stockMode === 'add' ? existing.quantity + v.quantity : v.quantity,
+            }),
+            ...(v.salePrice !== undefined && { salePrice: v.salePrice }),
+            ...(v.costPrice !== undefined && { costPrice: v.costPrice }),
             name: v.name,
             categoryId,
             ...(v.brand && { brand: v.brand }),
@@ -295,8 +352,8 @@ export async function confirmUpload(fileBuffer: Buffer, fileName: string, userId
           data: {
             sku: v.variantSku,
             name: v.name,
-            quantity: v.quantity,
-            salePrice: v.salePrice,
+            quantity: v.quantity ?? 0,
+            salePrice: v.salePrice!,
             costPrice: v.costPrice ?? 0,
             categoryId,
             brand: v.brand,

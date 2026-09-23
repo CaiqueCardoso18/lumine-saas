@@ -11,6 +11,7 @@ import {
   getProductFacets,
   getStockValue,
   listAllProductsForExport,
+  listProductIds,
 } from './service';
 import { sendSuccess, sendPaginated } from '../../shared/utils/response';
 import { canViewCostPrice } from '../../middleware/requirePermission';
@@ -101,6 +102,19 @@ export async function stockValue(req: Request, res: Response, next: NextFunction
     // Custo e lucro só para quem tem permissão de ver custo
     const includeCost = await canViewCostPrice(req);
     return sendSuccess(res, await getStockValue(includeCost));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Devolve só os IDs que batem com os filtros, para a seleção em massa
+ * alcançar além dos 20 itens da página atual.
+ */
+export async function productIds(req: Request, res: Response, next: NextFunction) {
+  try {
+    const ids = await listProductIds(req.query as unknown as Parameters<typeof listProductIds>[0]);
+    return sendSuccess(res, { ids, total: ids.length });
   } catch (err) {
     next(err);
   }

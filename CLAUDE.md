@@ -67,6 +67,8 @@ lumine_saas/
   roda update individual dentro de uma transação.
 - Histórico de alterações via AuditLog
 - Endpoint de estoque baixo (`/api/products/low-stock`)
+- `GET /api/products/ids` — só os IDs do filtro, para a seleção em massa
+  alcançar além dos 20 da página
 - `GET /api/products/stock-value` — dinheiro parado em estoque: a custo (capital
   imobilizado), a preço de venda, lucro potencial e quebra por categoria. Custo e
   lucro só entram na resposta para quem tem `view_cost_price` — a ausência do
@@ -86,7 +88,12 @@ lumine_saas/
   4. POST `/api/upload/confirm` — aplica as mudanças
   5. Registra tudo no model Import (contadores de criado/atualizado/erro)
 - Template de planilha disponível para download
-- Colunas obrigatórias: sku, nome, quantidade, preco_venda
+- Colunas obrigatórias: **sku e nome**
+- **Import parcial:** quantidade e preco_venda são OPCIONAIS. Coluna ausente =
+  campo não alterado, o que permite planilha só de custo sem zerar estoque nem
+  preço. Produto NOVO ainda exige preco_venda (avisado no preview).
+- A coluna `sku` leva a REFERÊNCIA BASE, não o SKU composto — o sistema compõe
+  com tamanho e cor. Mandar `402-40-BEGE` viraria `402-40-BEGE-40-BEGE`.
 - Colunas opcionais: categoria, preco_custo, marca, tamanho, cor, publico, descricao_curta, descricao
 - **SKU composto por variante:** o SKU da planilha identifica o MODELO; tamanho e
   cor variam entre linhas. O import agrupa por (sku, tamanho, cor) e gera SKU

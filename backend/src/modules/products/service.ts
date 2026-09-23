@@ -576,3 +576,15 @@ export async function listAllProductsForExport(params: FacetFilters) {
     include: { category: { select: { name: true } } },
   });
 }
+
+/**
+ * Só os IDs que batem com os filtros, sem paginação.
+ *
+ * Existe para a seleção em massa: a tela mostra 20 por página, então
+ * "selecionar todos" só pegava esses 20. Com os IDs completos dá para
+ * selecionar os N do filtro sem carregar os produtos inteiros.
+ */
+export async function listProductIds(params: FacetFilters): Promise<string[]> {
+  const produtos = await listAllProductsForExport(params);
+  return produtos.map((p) => p.id);
+}

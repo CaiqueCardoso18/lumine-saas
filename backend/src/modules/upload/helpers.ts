@@ -131,9 +131,10 @@ export interface VariantRow {
   variantSku: string;
   baseSku: string;
   name: string;
-  quantity: number;
-  salePrice: number;
-  costPrice: number;
+  /** undefined = a planilha não trouxe a coluna; não mexer no valor atual */
+  quantity?: number;
+  salePrice?: number;
+  costPrice?: number;
   categoryName?: string;
   brand?: string;
   size?: string;
@@ -157,9 +158,9 @@ export function aggregateVariants<
   T extends {
     sku: string;
     name: string;
-    quantity: number;
-    salePrice: number;
-    costPrice: number;
+    quantity?: number;
+    salePrice?: number;
+    costPrice?: number;
     categoryName?: string;
     brand?: string;
     size?: string;
@@ -177,11 +178,14 @@ export function aggregateVariants<
     const existing = map.get(variantSku);
 
     if (existing) {
-      // Mesma variante repetida: soma o estoque, mantém o resto da última linha
-      existing.quantity += data.quantity;
+      // Mesma variante repetida: soma o estoque, mantém o resto da última linha.
+      // Campos ausentes continuam ausentes — somar undefined viraria NaN.
+      if (data.quantity !== undefined) {
+        existing.quantity = (existing.quantity ?? 0) + data.quantity;
+      }
       existing.name = data.name;
-      existing.salePrice = data.salePrice;
-      if (data.costPrice) existing.costPrice = data.costPrice;
+      if (data.salePrice !== undefined) existing.salePrice = data.salePrice;
+      if (data.costPrice !== undefined) existing.costPrice = data.costPrice;
       if (data.categoryName) existing.categoryName = data.categoryName;
       if (data.brand) existing.brand = data.brand;
       if (data.audience) existing.audience = data.audience;

@@ -161,6 +161,25 @@ function ProductsPageContent() {
     }
   }
 
+  /**
+   * Seleciona TODOS os produtos do filtro, não só os 20 da página.
+   * A listagem é paginada, então precisa buscar os IDs no servidor.
+   */
+  const selectAllMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.get<{ ids: string[]; total: number }>(
+        `/api/products/ids?${filterKey}`
+      );
+      return res.data?.ids ?? [];
+    },
+    onSuccess: (ids) => {
+      setSelectedIds(new Set(ids));
+      toast({ title: `${ids.length} produto(s) selecionados` });
+    },
+    onError: () =>
+      toast({ title: 'Erro ao selecionar todos', variant: 'destructive' }),
+  });
+
   function toggleOne(id: string) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -362,9 +381,23 @@ function ProductsPageContent() {
             exit={{ opacity: 0, y: -10 }}
             className="flex flex-wrap items-center gap-3 p-4 bg-lumine-lavender-pale rounded-xl border border-lumine-lavender"
           >
-            <span className="text-sm font-medium text-lumine-sage-dark">
-              {selectedIds.size} produto(s) selecionado(s)
-            </span>
+            <div className="text-sm">
+              <span className="font-medium text-lumine-sage-dark">
+                {selectedIds.size} produto(s) selecionado(s)
+              </span>
+              {/* Só oferece estender quando existe mais coisa fora da página */}
+              {meta && selectedIds.size < meta.total && (
+                <button
+                  onClick={() => selectAllMutation.mutate()}
+                  disabled={selectAllMutation.isPending}
+                  className="ml-2 text-lumine-lavender hover:text-lumine-sage underline underline-offset-2 transition-colors disabled:opacity-50"
+                >
+                  {selectAllMutation.isPending
+                    ? 'Selecionando...'
+                    : `Selecionar todos os ${meta.total}`}
+                </button>
+              )}
+            </div>
             <div className="flex gap-2 ml-auto flex-wrap">
               <Button size="sm" variant="outline" onClick={() => setBulkOpen(true)}>
                 <Tag size={14} className="mr-2" />
