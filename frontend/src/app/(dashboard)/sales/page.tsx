@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Plus, Search, ShoppingCart, XCircle, Eye } from 'lucide-react';
+import { Plus, Search, ShoppingCart, XCircle, Eye, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -16,28 +16,57 @@ import { Sale } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { NewSaleDialog } from '@/components/sales/NewSaleDialog';
 import { SaleDetailDialog } from '@/components/sales/SaleDetailDialog';
+import { EditSaleDialog } from '@/components/sales/EditSaleDialog';
+import { usePermission } from '@/hooks/usePermission';
+import { SortControl, SortState } from '@/components/ui/sort-control';
+
+type SaleSortKey = 'createdAt' | 'total' | 'saleNumber';
+
+const SALE_SORT_OPTIONS: Array<{ value: SaleSortKey; label: string }> = [
+  { value: 'createdAt', label: 'Data' },
+  { value: 'total', label: 'Valor' },
+  { value: 'saleNumber', label: 'Nº da venda' },
+];
+
+const SALE_DEFAULT_ORDER = { createdAt: 'desc', total: 'desc', saleNumber: 'desc' } as const;
 
 function SalesPageContent() {
   const qc = useQueryClient();
   const searchParams = useSearchParams();
   const [newSaleOpen, setNewSaleOpen] = useState(false);
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [editingSale, setEditingSale] = useState<Sale | null>(null);
+  const { isOwner, can } = usePermission();
+  // Faturamento, líquido e ticket médio são números do negócio
+  const veFinanceiro = can('view_financials');
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<SortState<SaleSortKey>>({ by: 'createdAt', order: 'desc' });
 
   useEffect(() => {
     if (searchParams.get('new') === 'true') setNewSaleOpen(true);
   }, [searchParams]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['sales', page],
-    queryFn: () => api.paginated<Sale>(`/api/sales?page=${page}&limit=20`),
+    queryKey: ['sales', page, sort.by, sort.order],
+    queryFn: () =>
+      api.paginated<Sale>(
+        `/api/sales?page=${page}&limit=20&sortBy=${sort.by}&sortOrder=${sort.order}`
+      ),
     placeholderData: (prev) => prev,
   });
 
   const { data: summaryData } = useQuery({
+    enabled: veFinanceiro,
     queryKey: ['sales', 'summary'],
-    queryFn: () => api.get<{ totalSales: number; totalRevenue: number; avgTicket: number }>('/api/sales/summary'),
+    queryFn: () =>
+      api.get<{
+        totalSales: number;
+        totalRevenue: number;
+        avgTicket: number;
+        totalFee: number;
+        netRevenue: number;
+      }>('/api/sales/summary'),
   });
 
   const cancelMutation = useMutation({
@@ -59,18 +88,29 @@ function SalesPageContent() {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       {/* Summary KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-        {[
-          { label: 'Vendas hoje', value: String(summary?.totalSales ?? 0) },
-          { label: 'Faturamento', value: formatCurrency(summary?.totalRevenue ?? 0) },
-          { label: 'Ticket médio', value: formatCurrency(summary?.avgTicket ?? 0) },
-        ].map((kpi) => (
-          <Card key={kpi.label} className="p-4 text-center">
-            <p className="text-xs text-lumine-warm-gray">{kpi.label}</p>
-            <p className="font-heading text-xl font-semibold text-lumine-charcoal mt-1">{kpi.value}</p>
-          </Card>
-        ))}
-      </div>
+      {veFinanceiro && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          {[
+            { label: 'Vendas hoje', value: String(summary?.totalSales ?? 0), hint: '' },
+            { label: 'Faturamento', value: formatCurrency(summary?.totalRevenue ?? 0), hint: '' },
+            {
+              // O que sobra depois da maquininha — é esse valor que entra na conta
+              label: 'Você recebe',
+              value: formatCurrency(summary?.netRevenue ?? 0),
+              hint: (summary?.totalFee ?? 0) > 0
+                ? `Taxa: ${formatCurrency(summary?.totalFee ?? 0)}`
+                : '',
+            },
+            { label: 'Ticket médio', value: formatCurrency(summary?.avgTicket ?? 0), hint: '' },
+          ].map((kpi) => (
+            <Card key={kpi.label} className="p-4 text-center">
+              <p className="text-xs text-lumine-warm-gray">{kpi.label}</p>
+              <p className="font-heading text-xl font-semibold text-lumine-charcoal mt-1">{kpi.value}</p>
+              {kpi.hint && <p className="text-[11px] text-lumine-warm-gray mt-0.5">{kpi.hint}</p>}
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="flex flex-wrap gap-3 justify-between">
@@ -87,7 +127,15 @@ function SalesPageContent() {
       {/* Sales list */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Histórico de Vendas</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-base">Histórico de Vendas</CardTitle>
+            <SortControl
+              value={sort}
+              onChange={(next) => { setSort(next); setPage(1); }}
+              options={SALE_SORT_OPTIONS}
+              defaultOrder={SALE_DEFAULT_ORDER}
+            />
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
@@ -139,11 +187,25 @@ function SalesPageContent() {
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedSale(sale)}>
                       <Eye size={14} strokeWidth={1.5} />
                     </Button>
+                    {/* Editar venda mexe em estoque e caixa de algo já fechado,
+                        então é só do dono — e sempre vai para a auditoria */}
+                    {sale.status === 'COMPLETED' && isOwner && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        title="Editar venda"
+                        onClick={() => setEditingSale(sale)}
+                      >
+                        <Pencil size={14} strokeWidth={1.5} />
+                      </Button>
+                    )}
                     {sale.status === 'COMPLETED' && (
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 hover:text-lumine-danger"
+                        title="Estornar venda"
                         onClick={() => {
                           const reason = prompt('Motivo do cancelamento:');
                           if (reason) cancelMutation.mutate({ id: sale.id, reason });
@@ -173,6 +235,17 @@ function SalesPageContent() {
       <NewSaleDialog open={newSaleOpen} onOpenChange={setNewSaleOpen} />
       {selectedSale && (
         <SaleDetailDialog sale={selectedSale} onClose={() => setSelectedSale(null)} />
+      )}
+      {/* key por venda: remonta o diálogo a cada abertura.
+          Sem isso, reabrir a MESMA venda devolvia a mesma referência do cache
+          do React Query, o useEffect não disparava e as alterações abandonadas
+          da vez anterior continuavam na tela. */}
+      {editingSale && (
+        <EditSaleDialog
+          key={editingSale.id}
+          sale={editingSale}
+          onClose={() => setEditingSale(null)}
+        />
       )}
     </motion.div>
   );

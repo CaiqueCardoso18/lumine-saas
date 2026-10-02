@@ -28,10 +28,19 @@ export function useLogin() {
   return useMutation({
     mutationFn: (credentials: { email: string; password: string }) =>
       api.post<{ user: User }>('/api/auth/login', credentials),
-    onSuccess: () => {
+    onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['auth', 'me'] });
+
+      // Quem não pode ver o dashboard cai direto no PDV. Mandar todo mundo
+      // para '/dashboard' fazia a vendedora ver um piscar de redirect no
+      // primeiro acesso. A decisão usa o usuário que acabou de vir do login,
+      // porque o cache do /me ainda não foi revalidado neste instante.
+      const u = res.data?.user;
+      const perms: string[] = Array.isArray(u?.permissions) ? (u!.permissions as string[]) : [];
+      const veDashboard = u?.role === 'OWNER' || perms.includes('view_financials');
+
       // Full page reload para o middleware do Next.js ler o cookie httpOnly
-      window.location.href = '/dashboard';
+      window.location.href = veDashboard ? '/dashboard' : '/sales';
     },
   });
 }

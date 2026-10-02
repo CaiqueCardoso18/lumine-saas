@@ -17,6 +17,7 @@ import { useAuth } from './useAuth';
  * manage_inventory  → Contagens e movimentações de estoque
  * cancel_sale       → Cancelar/estornar venda
  * view_audit        → Tela de Auditoria
+ * view_financials   → Dashboard, faturamento e dinheiro em estoque
  */
 export type Permission =
   | 'view_orders'
@@ -26,7 +27,8 @@ export type Permission =
   | 'upload'
   | 'manage_inventory'
   | 'cancel_sale'
-  | 'view_audit';
+  | 'view_audit'
+  | 'view_financials';
 
 export function usePermission() {
   const { user } = useAuth();
@@ -61,10 +63,25 @@ export function usePermission() {
       case '/upload':      return can('upload');
       case '/inventory':   return can('manage_inventory');
       case '/audit':       return can('view_audit');
+      // Calendário e Configurações mostram o caixa e os ajustes da loja
+      case '/finance':     return false; // apenas OWNER
+      // Dashboard é só número de negócio: faturamento do dia, ticket médio e
+      // quanto a loja tem parado em estoque. Sem view_financials ela nem entra.
+      case '/dashboard':   return can('view_financials');
       case '/settings':    return false; // apenas OWNER
-      default:             return true;  // dashboard, products, sales
+      default:             return true;  // produtos e vendas
     }
   }
 
-  return { can, isAdmin, canAccessRoute, isOwner, permissions };
+  /**
+   * Primeira tela do usuário ao entrar.
+   *
+   * Sem o dashboard, mandar para `/dashboard` jogaria a vendedora num redirect
+   * logo após o login. O PDV é onde ela trabalha.
+   */
+  function homeRoute(): string {
+    return canAccessRoute('/dashboard') ? '/dashboard' : '/sales';
+  }
+
+  return { can, isAdmin, canAccessRoute, homeRoute, isOwner, permissions };
 }

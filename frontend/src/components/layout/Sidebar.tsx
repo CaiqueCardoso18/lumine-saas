@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Package, ShoppingCart, TrendingUp, Lightbulb,
   Upload, Settings, ChevronLeft, ChevronRight, ClipboardList, X, Warehouse, ShieldCheck,
-  Users, Wallet,
+  Users, Wallet, CalendarDays,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermission } from '@/hooks/usePermission';
@@ -20,6 +20,7 @@ const navItems = [
   { href: '/orders',     icon: ClipboardList,    label: 'Pedidos'      },
   { href: '/customers',  icon: Users,            label: 'Clientes'     },
   { href: '/crediario',  icon: Wallet,           label: 'Crediário'    },
+  { href: '/finance',    icon: CalendarDays,     label: 'Calendário'   },
   { href: '/analytics',  icon: TrendingUp,       label: 'Analytics'    },
   { href: '/insights',   icon: Lightbulb,        label: 'Insights'     },
   { href: '/inventory',  icon: Warehouse,        label: 'Inventário'   },

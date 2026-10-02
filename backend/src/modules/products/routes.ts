@@ -16,8 +16,10 @@ const router = Router();
 router.get('/template', downloadTemplate);
 
 router.use(authenticate);
+// Estoque baixo continua liberado: saber o que esta acabando e ferramenta de
+// trabalho da vendedora. Quanto a loja tem parado em estoque, nao.
 router.get('/low-stock', lowStock);
-router.get('/stock-value', stockValue);
+router.get('/stock-value', requirePermission('view_financials'), stockValue);
 router.get('/export', validate(productFacetsSchema, 'query'), exportProducts);
 router.get('/ids', validate(productFacetsSchema, 'query'), productIds);
 router.get('/facets', validate(productFacetsSchema, 'query'), facets);

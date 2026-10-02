@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { listSales, getSaleById, getSalesSummary, createSale, cancelSale } from './service';
+import { listSales, getSaleById, getSalesSummary, createSale, updateSale, cancelSale } from './service';
 import { sendSuccess, sendPaginated } from '../../shared/utils/response';
 
 export async function index(req: Request, res: Response, next: NextFunction) {
@@ -43,6 +43,20 @@ export async function cancel(req: Request, res: Response, next: NextFunction) {
   try {
     const result = await cancelSale(req.params.id, req.body, req.user!.userId);
     return sendSuccess(res, result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Edição de venda: só OWNER, e o estoque é ajustado pela diferença.
+ * O role vai para o service porque a regra de quem pode editar vive junto
+ * das outras regras da venda.
+ */
+export async function update(req: Request, res: Response, next: NextFunction) {
+  try {
+    const sale = await updateSale(req.params.id, req.body, req.user!.userId, req.user!.role);
+    return sendSuccess(res, sale);
   } catch (err) {
     next(err);
   }

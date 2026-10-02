@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import {
   listInstallments, getCrediarioSummary, listDebtors, payInstallment, reopenInstallment,
+  updateInstallment, renegotiateInstallments,
 } from './service';
 import { sendSuccess, sendPaginated } from '../../shared/utils/response';
 
@@ -33,4 +34,20 @@ export async function reopen(req: Request, res: Response, next: NextFunction) {
   try {
     return sendSuccess(res, await reopenInstallment(req.params.id, req.user!.userId));
   } catch (err) { next(err); }
+}
+
+export async function update(req: Request, res: Response, next: NextFunction) {
+  try {
+    return sendSuccess(res, await updateInstallment(req.params.id, req.body, req.user!.userId));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function renegotiate(req: Request, res: Response, next: NextFunction) {
+  try {
+    return sendSuccess(res, await renegotiateInstallments(req.body, req.user!.userId));
+  } catch (err) {
+    next(err);
+  }
 }

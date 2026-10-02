@@ -181,3 +181,169 @@ export function FilterChip({
     </span>
   );
 }
+
+interface MultiProps {
+  label: string;
+  /** Valores marcados. Lista vazia = "todos". */
+  values: string[];
+  options: FilterOption[];
+  onChange: (values: string[]) => void;
+  placeholder?: string;
+  searchable?: boolean;
+  className?: string;
+}
+
+/**
+ * Filtro de múltipla escolha.
+ *
+ * A vendedora precisa somar seleções na mesma dimensão ("saia E collant
+ * infantil"), o que o FilterSelect de valor único não permitia — marcar um
+ * desmarcava o outro. Aqui cada opção é um checkbox e o dropdown FICA ABERTO
+ * ao marcar, senão escolher três categorias viraria três cliques de reabrir.
+ */
+export function MultiFilterSelect({
+  label,
+  values,
+  options,
+  onChange,
+  placeholder = 'Todos',
+  searchable = false,
+  className,
+}: MultiProps) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) setQuery('');
+  }, [open]);
+
+  const filtered = query
+    ? options.filter((o) => o.label.toLowerCase().includes(query.toLowerCase()))
+    : options;
+
+  const ativo = values.length > 0;
+
+  function toggle(v: string) {
+    onChange(values.includes(v) ? values.filter((x) => x !== v) : [...values, v]);
+  }
+
+  /**
+   * Resumo no botão: um nome quando é só um, contagem quando são vários —
+   * "Categoria: 3 selecionadas" cabe onde três nomes não caberiam.
+   */
+  const resumo = !ativo
+    ? placeholder
+    : values.length === 1
+      ? options.find((o) => o.value === values[0])?.label ?? values[0]
+      : `${values.length} selecionados`;
+
+  return (
+    <div ref={ref} className={cn('relative', className)}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          'flex items-center gap-2 h-9 px-3 rounded-xl border bg-white text-sm transition-all whitespace-nowrap',
+          ativo
+            ? 'border-lumine-lavender text-lumine-charcoal ring-1 ring-lumine-lavender'
+            : 'border-lumine-lavender-pale text-lumine-warm-gray hover:border-lumine-lavender'
+        )}
+      >
+        <span className="text-lumine-warm-gray">{label}:</span>
+        <span className={cn('font-medium', ativo ? 'text-lumine-charcoal' : 'text-lumine-warm-gray')}>
+          {resumo}
+        </span>
+        <ChevronDown
+          size={14}
+          className={cn('text-lumine-warm-gray transition-transform', open && 'rotate-180')}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute z-30 mt-1 min-w-[15rem] max-w-[20rem] bg-white border border-lumine-lavender-pale rounded-xl shadow-lg overflow-hidden">
+          {searchable && (
+            <div className="relative border-b border-lumine-lavender-pale">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-lumine-warm-gray" />
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={`Buscar ${label.toLowerCase()}...`}
+                className="w-full pl-8 pr-3 py-2 text-sm outline-none placeholder:text-lumine-warm-gray/70"
+              />
+            </div>
+          )}
+
+          <div className="max-h-64 overflow-y-auto py-1">
+            {filtered.length === 0 ? (
+              <p className="px-3 py-3 text-xs text-lumine-warm-gray text-center">Nenhuma opção</p>
+            ) : (
+              filtered.map((o) => {
+                const marcado = values.includes(o.value);
+                return (
+                  <button
+                    key={o.value}
+                    type="button"
+                    onClick={() => toggle(o.value)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-lumine-lavender-pale/40 transition-colors"
+                  >
+                    <span
+                      className={cn(
+                        'w-4 h-4 shrink-0 rounded border flex items-center justify-center transition-colors',
+                        marcado
+                          ? 'bg-lumine-lavender border-lumine-lavender'
+                          : 'border-lumine-lavender-pale bg-white'
+                      )}
+                    >
+                      {marcado && <Check size={11} className="text-white" strokeWidth={3} />}
+                    </span>
+                    <span
+                      className={cn(
+                        'flex-1 truncate',
+                        marcado ? 'font-medium text-lumine-charcoal' : 'text-lumine-charcoal/80'
+                      )}
+                    >
+                      {o.label}
+                    </span>
+                    {o.count !== undefined && (
+                      <span className="text-xs text-lumine-warm-gray tabular-nums shrink-0">
+                        {o.count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          {ativo && (
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              className="w-full px-3 py-2 text-xs text-lumine-warm-gray hover:text-lumine-danger border-t border-lumine-lavender-pale transition-colors"
+            >
+              Limpar {label.toLowerCase()}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -25,7 +25,7 @@ function buildCustomerSearchText(c: {
 }
 
 export async function listCustomers(params: ListCustomersInput) {
-  const { page, limit, search, withDebt, active } = params;
+  const { page, limit, search, withDebt, active, sortBy, sortOrder } = params;
 
   const where: Prisma.CustomerWhereInput = {
     deletedAt: null,
@@ -43,7 +43,7 @@ export async function listCustomers(params: ListCustomersInput) {
       where,
       skip: (page - 1) * limit,
       take: limit,
-      orderBy: { name: 'asc' },
+      orderBy: { [sortBy]: sortOrder } as Prisma.CustomerOrderByWithRelationInput,
       include: {
         _count: { select: { sales: true } },
         installments: {

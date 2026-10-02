@@ -64,6 +64,19 @@ export function SaleDetailDialog({ sale, onClose }: Props) {
               <span className="text-lumine-sage-dark">Total</span>
               <span className="text-lumine-gold font-heading text-lg">{formatCurrency(sale.total)}</span>
             </div>
+            {/* Taxa só aparece quando houve cartão — em PIX seria uma linha de zero */}
+            {Number(sale.feeAmount ?? 0) > 0 && (
+              <>
+                <div className="flex justify-between text-sm text-lumine-warm-gray">
+                  <span>Taxa do cartão</span>
+                  <span>-{formatCurrency(sale.feeAmount)}</span>
+                </div>
+                <div className="flex justify-between text-sm font-medium">
+                  <span className="text-lumine-sage-dark">Você recebeu</span>
+                  <span className="text-lumine-success">{formatCurrency(sale.netTotal)}</span>
+                </div>
+              </>
+            )}
             <div className="flex justify-between text-xs text-lumine-warm-gray pt-1">
               <span>Pagamento</span>
               <span>{PAYMENT_METHOD_LABELS[sale.paymentMethod]}</span>

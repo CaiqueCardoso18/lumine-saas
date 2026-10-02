@@ -15,6 +15,7 @@ import { toast } from '@/hooks/use-toast';
 import { CustomerPicker, CustomerOption } from './CustomerPicker';
 import {
   PaymentPanel, PaymentMethod, SplitPayment, DiscountMode,
+  CrediarioFrequency,
 } from './PaymentPanel';
 
 interface CartItem {
@@ -35,6 +36,23 @@ function defaultFirstDue(): string {
   return d.toISOString().slice(0, 10);
 }
 
+interface CardFee {
+  method: 'DEBIT_CARD' | 'CREDIT_CARD';
+  installments: number;
+  feePercent: number;
+}
+
+/**
+ * Taxa de uma forma, em %. Espelha resolveFeePercent do backend: procura a
+ * linha exata da parcela e, não achando, cai na de 1x. Sem tabela, zero.
+ */
+function feePercentOf(fees: CardFee[], method: string, installments: number): number {
+  if (method !== 'DEBIT_CARD' && method !== 'CREDIT_CARD') return 0;
+  const exata = fees.find((f) => f.method === method && f.installments === installments);
+  if (exata) return exata.feePercent;
+  return fees.find((f) => f.method === method && f.installments === 1)?.feePercent ?? 0;
+}
+
 export function NewSaleDialog({ open, onOpenChange }: Props) {
   const qc = useQueryClient();
   const { isOwner } = usePermission();
@@ -49,16 +67,24 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
   const [discountValue, setDiscountValue] = useState<number | null>(null);
   const [crediarioCount, setCrediarioCount] = useState(1);
   const [crediarioFirstDue, setCrediarioFirstDue] = useState(defaultFirstDue);
+  const [crediarioFrequency, setCrediarioFrequency] = useState<CrediarioFrequency>('MONTHLY');
+  const [downPayment, setDownPayment] = useState<number | null>(null);
+  const [downPaymentMethod, setDownPaymentMethod] =
+    useState<Exclude<PaymentMethod, 'MIXED' | 'CREDIARIO'>>('CASH');
   const [notes, setNotes] = useState('');
   const [editingPrice, setEditingPrice] = useState<string | null>(null);
   // No celular a tela não cabe lado a lado, então alterna entre buscar e fechar
   const [mobileView, setMobileView] = useState<'products' | 'cart'>('products');
+  // Por padrão a busca esconde o que está zerado: aparecer e só avisar na hora
+  // de fechar a venda fazia perder a venda inteira já montada.
+  const [incluirSemEstoque, setIncluirSemEstoque] = useState(false);
 
   const { data: searchResult } = useQuery({
-    queryKey: ['products', 'search', search],
+    queryKey: ['products', 'search', search, incluirSemEstoque],
     queryFn: () =>
       api.paginated<Product>(
-        `/api/products?search=${encodeURIComponent(search)}&status=ACTIVE&limit=20`
+        `/api/products?search=${encodeURIComponent(search)}&status=ACTIVE&limit=20` +
+          (incluirSemEstoque ? '' : '&inStock=true')
       ),
     enabled: search.length >= 2,
     staleTime: 30 * 1000,
@@ -66,10 +92,40 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
 
   const searchProducts = searchResult?.data ?? [];
 
+  /**
+   * Tabela de taxas da maquininha (Configurações → Taxas do cartão).
+   * Serve só para mostrar o líquido aqui; quem calcula de verdade e grava
+   * é o backend, então não dá para divergir por causa de cache.
+   */
+  const { data: feesResult } = useQuery({
+    queryKey: ['card-fees'],
+    queryFn: () => api.get<CardFee[]>('/api/card-fees'),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const cardFees = feesResult?.data ?? [];
+
   const addToCart = useCallback((product: Product) => {
+    if (product.quantity <= 0) {
+      toast({
+        title: 'Sem estoque',
+        description: `${product.name} está zerado. Ajuste o estoque antes de vender.`,
+        variant: 'destructive',
+      });
+      return;
+    }
     setCart((prev) => {
       const existing = prev.find((i) => i.product.id === product.id);
       if (existing) {
+        // Não deixa passar do que existe: o backend recusaria só no fim
+        if (existing.quantity >= product.quantity) {
+          toast({
+            title: 'Estoque insuficiente',
+            description: `Só há ${product.quantity} de ${product.name}.`,
+            variant: 'destructive',
+          });
+          return prev;
+        }
         return prev.map((i) =>
           i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i
         );
@@ -85,9 +141,21 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
   function updateQuantity(productId: string, delta: number) {
     setCart((prev) =>
       prev
-        .map((i) =>
-          i.product.id === productId ? { ...i, quantity: Math.max(0, i.quantity + delta) } : i
-        )
+        .map((i) => {
+          if (i.product.id !== productId) return i;
+          // O + para no estoque disponível em vez de deixar montar uma venda
+          // que o servidor recusaria só no fim
+          const alvo = i.quantity + delta;
+          if (delta > 0 && alvo > i.product.quantity) {
+            toast({
+              title: 'Estoque insuficiente',
+              description: `Só há ${i.product.quantity} de ${i.product.name}.`,
+              variant: 'destructive',
+            });
+            return i;
+          }
+          return { ...i, quantity: Math.max(0, alvo) };
+        })
         .filter((i) => i.quantity > 0)
     );
   }
@@ -119,6 +187,13 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
 
   const total = Math.max(0, subtotal - discountAmount);
 
+  /**
+   * Quanto a maquininha fica com esta venda.
+   * No misto cada forma tem a sua taxa; fora dele, a forma escolhida leva o
+   * total inteiro. Serve para a tela dizer quanto CAI NA CONTA, não só quanto
+   * o cliente pagou.
+   */
+
   // Quanto vai para o crediário: venda inteira ou só a parte do misto
   const crediarioAmount = useMemo(() => {
     if (paymentMethod === 'CREDIARIO') return total;
@@ -132,13 +207,67 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
 
   const precisaCliente = crediarioAmount > 0;
 
+  /**
+   * Entrada aceita: precisa ser menor que o crediário, senão não sobra nada
+   * para financiar e a venda deveria ter sido registrada à vista. O backend
+   * recusa também — aqui é só para não deixar apertar Finalizar à toa.
+   */
+  const entradaValida =
+    crediarioAmount > 0 && (downPayment ?? 0) > 0 && (downPayment ?? 0) < crediarioAmount
+      ? Number(downPayment)
+      : 0;
+
+  const entradaInvalida = (downPayment ?? 0) > 0 && (downPayment ?? 0) >= crediarioAmount;
+
+  const feeAmount = useMemo(() => {
+    const base =
+      paymentMethod === 'MIXED'
+        ? payments.map((p) => ({
+            method: p.method as string,
+            amount: p.amount ?? 0,
+            installments: p.method === 'CREDIT_CARD' ? (p.installments ?? installments) : 1,
+          }))
+        : [{
+            method: paymentMethod as string,
+            amount: total,
+            installments: paymentMethod === 'CREDIT_CARD' ? installments : 1,
+          }];
+
+    /**
+     * Espelha applyDownPayment do backend: a entrada sai da linha de crediário
+     * e vira linha própria na forma escolhida. Sem isso a tela ignorava a
+     * entrada e, quando ela era no cartão, mostrava um líquido maior do que o
+     * que o servidor gravava.
+     */
+    const linhas =
+      entradaValida > 0
+        ? [
+            ...base.map((l) =>
+              l.method === 'CREDIARIO'
+                ? { ...l, amount: Math.round((l.amount - entradaValida) * 100) / 100 }
+                : l
+            ),
+            { method: downPaymentMethod as string, amount: entradaValida, installments: 1 },
+          ].filter((l) => l.amount > 0)
+        : base;
+
+    const soma = linhas.reduce((acc, l) => {
+      const pct = feePercentOf(cardFees, l.method, l.installments);
+      return acc + (pct > 0 ? Math.round(l.amount * (pct / 100) * 100) / 100 : 0);
+    }, 0);
+    return Math.round(soma * 100) / 100;
+  }, [cardFees, paymentMethod, payments, installments, total, entradaValida, downPaymentMethod]);
+
+  const netTotal = Math.round((total - feeAmount) * 100) / 100;
+
   const splitSum = payments.reduce((acc, p) => acc + (p.amount ?? 0), 0);
   const splitOk =
     paymentMethod !== 'MIXED' ||
     (payments.length >= 2 && Math.abs(splitSum - total) < 0.005);
 
   const podeFinalizar =
-    cart.length > 0 && splitOk && (!precisaCliente || !!customer) && total >= 0;
+    cart.length > 0 && splitOk && (!precisaCliente || !!customer) && total >= 0 &&
+    !entradaInvalida;
 
   // ─── Envio ─────────────────────────────────────────────────
 
@@ -167,6 +296,11 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
         ...(crediarioAmount > 0 && {
           crediarioCount,
           crediarioFirstDueDate: crediarioFirstDue,
+          crediarioFrequency,
+          ...(entradaValida > 0 && {
+            downPayment: entradaValida,
+            downPaymentMethod,
+          }),
         }),
         notes: notes.trim() || undefined,
       }),
@@ -198,6 +332,9 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
     setPayments([]);
     setCrediarioCount(1);
     setCrediarioFirstDue(defaultFirstDue());
+    setCrediarioFrequency('MONTHLY');
+    setDownPayment(null);
+    setDownPaymentMethod('CASH');
     setMobileView('products');
   }
 
@@ -272,6 +409,16 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
                   autoFocus
                 />
               </div>
+
+              <label className="flex items-center gap-2 mt-2 text-xs text-lumine-warm-gray cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={incluirSemEstoque}
+                  onChange={(e) => setIncluirSemEstoque(e.target.checked)}
+                  className="w-3.5 h-3.5 accent-lumine-lavender"
+                />
+                Mostrar também produtos sem estoque
+              </label>
             </div>
 
             <div className="flex-1 overflow-y-auto p-2">
@@ -319,7 +466,9 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
                 <div className="text-center py-8">
                   <p className="text-sm text-lumine-warm-gray">Nenhum produto encontrado</p>
                   <p className="text-xs text-lumine-warm-gray mt-1">
-                    Tente menos termos, ou confira se o produto está ativo
+                    {incluirSemEstoque
+                      ? 'Tente menos termos, ou confira se o produto está ativo'
+                      : 'Só aparecem produtos com estoque — marque a opção acima para ver os zerados'}
                   </p>
                 </div>
               )}
@@ -473,6 +622,12 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
                 onCrediarioCountChange={setCrediarioCount}
                 crediarioFirstDue={crediarioFirstDue}
                 onCrediarioFirstDueChange={setCrediarioFirstDue}
+                crediarioFrequency={crediarioFrequency}
+                onCrediarioFrequencyChange={setCrediarioFrequency}
+                downPayment={downPayment}
+                onDownPaymentChange={setDownPayment}
+                downPaymentMethod={downPaymentMethod}
+                onDownPaymentMethodChange={setDownPaymentMethod}
                 subtotal={subtotal}
                 discountAmount={discountAmount}
                 total={total}
@@ -500,6 +655,22 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
                     {formatCurrency(total)}
                   </span>
                 </div>
+
+                {/* Só aparece quando existe taxa: em PIX e dinheiro seria ruído */}
+                {feeAmount > 0 && (
+                  <>
+                    <div className="flex justify-between items-center text-lumine-warm-gray">
+                      <span className="text-xs">Taxa do cartão</span>
+                      <span className="text-xs">-{formatCurrency(feeAmount)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-lumine-sage-dark">Você recebe</span>
+                      <span className="font-semibold text-lumine-success">
+                        {formatCurrency(netTotal)}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
 
             </div>
@@ -514,9 +685,11 @@ export function NewSaleDialog({ open, onOpenChange }: Props) {
                 <p className="text-xs text-lumine-danger text-center">
                   {precisaCliente && !customer
                     ? 'Escolha o cliente para vender no crediário'
-                    : !splitOk
-                      ? 'A soma das formas de pagamento precisa fechar com o total'
-                      : ''}
+                    : entradaInvalida
+                      ? 'A entrada precisa ser menor que o valor do crediário'
+                      : !splitOk
+                        ? 'A soma das formas de pagamento precisa fechar com o total'
+                        : ''}
                 </p>
               )}
 

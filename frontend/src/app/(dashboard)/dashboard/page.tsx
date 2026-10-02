@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from '@/lib/formatters';
+import { PermissionGuard } from '@/components/layout/PermissionGuard';
 
 const fadeIn = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } };
 
@@ -62,7 +63,7 @@ function KPICard({
   );
 }
 
-export default function DashboardPage() {
+function DashboardContent() {
   const { data: summary } = useQuery({
     queryKey: ['sales', 'summary'],
     queryFn: () => api.get<{
@@ -409,5 +410,18 @@ export default function DashboardPage() {
         </Card>
       </motion.div>
     </motion.div>
+  );
+}
+
+/**
+ * O dashboard inteiro é número de negócio: faturamento do dia, ticket médio,
+ * dinheiro parado em estoque e as últimas vendas com valor. Nada disso é
+ * necessário para vender, então fica atrás de `view_financials`.
+ */
+export default function DashboardPage() {
+  return (
+    <PermissionGuard permission="view_financials">
+      <DashboardContent />
+    </PermissionGuard>
   );
 }

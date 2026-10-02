@@ -65,21 +65,43 @@ export const bulkUpdateSchema = z.object({
   ),
 });
 
+/**
+ * Filtro que aceita um valor ou vários.
+ *
+ * A vendedora precisa somar seleções ("quero ver saia E collant infantil"),
+ * então cada dimensão virou lista. Na URL vem repetido — `?size=P&size=M` —
+ * e o Express entrega string quando há um só e array quando há vários, daí
+ * o normalize para sempre virar array.
+ */
+const multi = z
+  .union([z.string(), z.array(z.string())])
+  .optional()
+  .transform((v) => {
+    if (v === undefined) return undefined;
+    const arr = Array.isArray(v) ? v : [v];
+    const limpo = arr.filter((x) => x !== '' && x !== undefined && x !== null);
+    return limpo.length > 0 ? limpo : undefined;
+  });
+
 export const listProductsSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   search: z.string().optional(),
-  categoryId: z.string().optional(),
-  subcategoryId: z.string().optional(),
-  status: z.enum(['ACTIVE', 'INACTIVE', 'DISCONTINUED']).optional(),
-  audience: z.enum(['ADULTO', 'INFANTIL']).optional(),
-  brand: z.string().optional(),
-  size: z.string().optional(),
-  color: z.string().optional(),
+  categoryId: multi,
+  subcategoryId: multi,
+  status: multi,
+  audience: multi,
+  brand: multi,
+  size: multi,
+  color: multi,
   minPrice: z.coerce.number().min(0).optional(),
   maxPrice: z.coerce.number().min(0).optional(),
   lowStock: z.coerce.boolean().optional(),
-  sortBy: z.enum(['name', 'sku', 'salePrice', 'quantity', 'createdAt']).default('createdAt'),
+  /** Só o que tem peça disponível — o PDV usa para não oferecer o que não existe. */
+  inStock: z.coerce.boolean().optional(),
+  sortBy: z
+    .enum(['name', 'sku', 'salePrice', 'costPrice', 'quantity', 'size', 'category', 'createdAt'])
+    .default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
 });
 

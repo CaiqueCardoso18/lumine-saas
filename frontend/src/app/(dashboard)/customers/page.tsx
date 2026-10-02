@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate, PAYMENT_METHOD_LABELS } from '@/lib/formatters';
 import { toast } from '@/hooks/use-toast';
+import { SortControl, SortState } from '@/components/ui/sort-control';
 
 interface CustomerListItem {
   id: string;
@@ -355,19 +356,31 @@ function CustomerDetailView({ id, onBack }: { id: string; onBack: () => void }) 
   );
 }
 
+type CustomerSortKey = 'name' | 'createdAt';
+
+const CUSTOMER_SORT_OPTIONS: Array<{ value: CustomerSortKey; label: string }> = [
+  { value: 'name', label: 'Nome' },
+  { value: 'createdAt', label: 'Cadastro' },
+];
+
+const CUSTOMER_DEFAULT_ORDER = { name: 'asc', createdAt: 'desc' } as const;
+
 export default function CustomersPage() {
   const [search, setSearch] = useState('');
   const [withDebt, setWithDebt] = useState(false);
   const [page, setPage] = useState(1);
   const [creating, setCreating] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [sort, setSort] = useState<SortState<CustomerSortKey>>({ by: 'name', order: 'asc' });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['customers', search, withDebt, page],
+    queryKey: ['customers', search, withDebt, page, sort.by, sort.order],
     queryFn: () => {
       const params = new URLSearchParams({ page: String(page), limit: '20' });
       if (search) params.set('search', search);
       if (withDebt) params.set('withDebt', 'true');
+      params.set('sortBy', sort.by);
+      params.set('sortOrder', sort.order);
       return api.paginated<CustomerListItem>(`/api/customers?${params}`);
     },
     placeholderData: (prev) => prev,
@@ -430,6 +443,15 @@ export default function CustomersPage() {
           <Wallet size={13} />
           Só devedores
         </button>
+
+        <div className="ml-auto">
+          <SortControl
+            value={sort}
+            onChange={(next) => { setSort(next); setPage(1); }}
+            options={CUSTOMER_SORT_OPTIONS}
+            defaultOrder={CUSTOMER_DEFAULT_ORDER}
+          />
+        </div>
       </div>
 
       <Card>

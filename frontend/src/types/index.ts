@@ -58,7 +58,10 @@ export interface Product {
 }
 
 // ─── Sales ────────────────────────────────────────────────────
-export type PaymentMethod = 'CASH' | 'PIX' | 'DEBIT_CARD' | 'CREDIT_CARD' | 'MIXED';
+/** Espelha o enum PaymentMethod do Prisma. CREDIARIO faltava aqui, então o
+ *  TypeScript achava que venda no crediário era impossível. */
+export type PaymentMethod =
+  | 'CASH' | 'PIX' | 'DEBIT_CARD' | 'CREDIT_CARD' | 'CREDIARIO' | 'MIXED';
 export type SaleStatus = 'COMPLETED' | 'CANCELLED';
 
 export interface SaleItem {
@@ -80,6 +83,10 @@ export interface SalePayment {
   method: PaymentMethod;
   amount: number;
   installments: number;
+  /** Taxa da maquininha congelada no momento da venda */
+  feePercent: number;
+  feeAmount: number;
+  netAmount: number;
 }
 
 export interface Sale {
@@ -87,10 +94,15 @@ export interface Sale {
   saleNumber: number;
   userId: string;
   user: Pick<User, 'id' | 'name'>;
+  customerId?: string | null;
+  customer?: { id: string; name: string } | null;
   subtotal: number;
   discountAmount: number;
   discountPercent?: number;
   total: number;
+  /** Taxa total da maquininha e o que sobra de fato */
+  feeAmount: number;
+  netTotal: number;
   paymentMethod: PaymentMethod;
   status: SaleStatus;
   notes?: string;

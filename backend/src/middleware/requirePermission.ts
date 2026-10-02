@@ -2,31 +2,13 @@ import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../config/database';
 import { UnauthorizedError, ForbiddenError } from '../shared/errors/AppError';
 
-/**
- * Permissões granulares da role EMPLOYEE.
- * OWNER ignora tudo isso — tem acesso total.
- */
-export const PERMISSIONS = [
-  'view_orders',      // aba Pedidos de Reposição
-  'view_cost_price',  // ver preço de custo e margem
-  'manage_products',  // criar/editar/excluir produtos
-  'view_analytics',   // abas Analytics e Insights
-  'upload',           // importar planilha
-  'manage_inventory', // sessões de contagem e movimentações de estoque
-  'cancel_sale',      // cancelar/estornar venda
-  'view_audit',       // tela de auditoria
-] as const;
+// A lista de permissões vive em ./permissions.ts (sem Prisma, para ser
+// testável isolada) e é reexportada aqui para não quebrar quem já importava
+// daqui.
+export { PERMISSIONS, DEFAULT_EMPLOYEE_PERMISSIONS } from './permissions';
+export type { Permission } from './permissions';
 
-export type Permission = (typeof PERMISSIONS)[number];
-
-/**
- * Permissões que uma vendedora recebe por padrão ao ser criada.
- *
- * Critério: ela precisa vender e consultar produto. Não precisa ver custo
- * (margem é informação do dono), nem mexer no cadastro, nem cancelar venda —
- * estorno mexe em estoque e caixa, então passa pelo dono.
- */
-export const DEFAULT_EMPLOYEE_PERMISSIONS: Permission[] = ['manage_inventory'];
+import type { Permission } from './permissions';
 
 /** Cache curto para não bater no banco a cada request do mesmo usuário. */
 const cache = new Map<string, { permissions: string[]; expires: number }>();

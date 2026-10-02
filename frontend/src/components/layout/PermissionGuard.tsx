@@ -21,7 +21,7 @@ interface Props {
 export function PermissionGuard({ permission, ownerOnly = false, children }: Props) {
   const router = useRouter();
   const { user, isLoading } = useAuth();
-  const { can, isOwner } = usePermission();
+  const { can, isOwner, homeRoute } = usePermission();
 
   const hasAccess = (() => {
     if (!user) return false;
@@ -33,8 +33,11 @@ export function PermissionGuard({ permission, ownerOnly = false, children }: Pro
 
   useEffect(() => {
     if (!isLoading && user && !hasAccess) {
-      router.replace('/dashboard');
+      // `homeRoute()` em vez de '/dashboard' fixo: a vendedora não tem acesso
+      // ao dashboard, e mandar para lá criaria um pingue-pongue de redirect
+      router.replace(homeRoute());
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading, user, hasAccess, router]);
 
   if (isLoading) return null;

@@ -23,6 +23,8 @@ export const listCustomersSchema = z.object({
   /** Só clientes com parcela em aberto */
   withDebt: z.coerce.boolean().optional(),
   active: z.coerce.boolean().optional(),
+  sortBy: z.enum(['name', 'createdAt']).default('name'),
+  sortOrder: z.enum(['asc', 'desc']).default('asc'),
 });
 
 export type CreateCustomerInput = z.infer<typeof createCustomerSchema>;

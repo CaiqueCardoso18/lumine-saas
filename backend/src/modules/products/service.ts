@@ -1,26 +1,51 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, ProductStatus } from '@prisma/client';
+
+/**
+ * Enums do Prisma são uniões de string literal, então declarar o tipo aqui
+ * evita depender do client gerado só para fazer o cast do filtro.
+ */
+type AudienceValue = 'ADULTO' | 'INFANTIL';
 import { prisma } from '../../config/database';
 import { buildSearchText, searchTerms } from '../../shared/utils/search';
 import { NotFoundError, ConflictError } from '../../shared/errors/AppError';
 import { createAuditLog } from '../../shared/utils/auditLog';
 import type { CreateProductInput, UpdateProductInput, BulkUpdateInput, ListProductsInput } from './validator';
 
+/**
+ * Ordenação da listagem.
+ *
+ * `category` ordena pelo NOME da categoria (relação), não pelo id — ordenar
+ * por id daria uma ordem aleatória para o usuário. `size` é texto no banco,
+ * então "10" vem antes de "9"; é o comportamento aceitável aqui porque os
+ * tamanhos misturam número e letra (P, M, 38, Curvy GG) e não há ordem
+ * numérica única possível.
+ */
+function buildOrderBy(
+  sortBy: ListProductsInput['sortBy'],
+  sortOrder: 'asc' | 'desc'
+): Prisma.ProductOrderByWithRelationInput {
+  if (sortBy === 'category') return { category: { name: sortOrder } };
+  return { [sortBy]: sortOrder } as Prisma.ProductOrderByWithRelationInput;
+}
+
 export async function listProducts(params: ListProductsInput) {
   const {
     page, limit, search, categoryId, subcategoryId, status, audience,
-    brand, size, color, minPrice, maxPrice, lowStock, sortBy, sortOrder,
+    brand, size, color, minPrice, maxPrice, lowStock, inStock, sortBy, sortOrder,
   } = params;
   const skip = (page - 1) * limit;
 
   const baseWhere: Prisma.ProductWhereInput = {
     deletedAt: null,
-    ...(status && { status }),
-    ...(categoryId && { categoryId }),
-    ...(subcategoryId && { subcategoryId }),
-    ...(audience && { audience }),
-    ...(brand && { brand }),
-    ...(size && { size }),
-    ...(color && { color }),
+    // Cada dimensão aceita vários valores somados (saia E collant, P E M...)
+    ...(status && { status: { in: status as ProductStatus[] } }),
+    ...(categoryId && { categoryId: { in: categoryId } }),
+    ...(subcategoryId && { subcategoryId: { in: subcategoryId } }),
+    ...(audience && { audience: { in: audience as AudienceValue[] } }),
+    ...(brand && { brand: { in: brand } }),
+    ...(size && { size: { in: size } }),
+    ...(color && { color: { in: color } }),
+    ...(inStock && { quantity: { gt: 0 } }),
     ...((minPrice !== undefined || maxPrice !== undefined) && {
       salePrice: {
         ...(minPrice !== undefined && { gte: minPrice }),
@@ -51,7 +76,7 @@ export async function listProducts(params: ListProductsInput) {
       where: productWhere,
       skip,
       take: limit,
-      orderBy: { [sortBy]: sortOrder },
+      orderBy: buildOrderBy(sortBy, sortOrder),
       include: {
         category: { select: { id: true, name: true, slug: true } },
         subcategory: { select: { id: true, name: true, slug: true } },
@@ -298,13 +323,14 @@ function buildFacetWhere(
 ): Prisma.ProductWhereInput {
   return {
     deletedAt: null,
-    ...(f.status && exclude !== 'status' && { status: f.status }),
-    ...(f.categoryId && exclude !== 'categoryId' && { categoryId: f.categoryId }),
-    ...(f.subcategoryId && { subcategoryId: f.subcategoryId }),
-    ...(f.audience && exclude !== 'audience' && { audience: f.audience }),
-    ...(f.brand && exclude !== 'brand' && { brand: f.brand }),
-    ...(f.size && exclude !== 'size' && { size: f.size }),
-    ...(f.color && exclude !== 'color' && { color: f.color }),
+    ...(f.status && exclude !== 'status' && { status: { in: f.status as ProductStatus[] } }),
+    ...(f.categoryId && exclude !== 'categoryId' && { categoryId: { in: f.categoryId } }),
+    ...(f.subcategoryId && { subcategoryId: { in: f.subcategoryId } }),
+    ...(f.audience && exclude !== 'audience' && { audience: { in: f.audience as AudienceValue[] } }),
+    ...(f.brand && exclude !== 'brand' && { brand: { in: f.brand } }),
+    ...(f.size && exclude !== 'size' && { size: { in: f.size } }),
+    ...(f.color && exclude !== 'color' && { color: { in: f.color } }),
+    ...(f.inStock && { quantity: { gt: 0 } }),
     ...(exclude !== 'price' &&
       (f.minPrice !== undefined || f.maxPrice !== undefined) && {
         salePrice: {
@@ -539,18 +565,19 @@ export async function getStockValue(includeCost: boolean) {
 export async function listAllProductsForExport(params: FacetFilters) {
   const {
     search, categoryId, subcategoryId, status, audience,
-    brand, size, color, minPrice, maxPrice, lowStock,
+    brand, size, color, minPrice, maxPrice, lowStock, inStock,
   } = params;
 
   const baseWhere: Prisma.ProductWhereInput = {
     deletedAt: null,
-    ...(status && { status }),
-    ...(categoryId && { categoryId }),
-    ...(subcategoryId && { subcategoryId }),
-    ...(audience && { audience }),
-    ...(brand && { brand }),
-    ...(size && { size }),
-    ...(color && { color }),
+    ...(status && { status: { in: status as ProductStatus[] } }),
+    ...(categoryId && { categoryId: { in: categoryId } }),
+    ...(subcategoryId && { subcategoryId: { in: subcategoryId } }),
+    ...(audience && { audience: { in: audience as AudienceValue[] } }),
+    ...(brand && { brand: { in: brand } }),
+    ...(size && { size: { in: size } }),
+    ...(color && { color: { in: color } }),
+    ...(inStock && { quantity: { gt: 0 } }),
     ...((minPrice !== undefined || maxPrice !== undefined) && {
       salePrice: {
         ...(minPrice !== undefined && { gte: minPrice }),

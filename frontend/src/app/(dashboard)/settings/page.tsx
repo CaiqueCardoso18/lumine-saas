@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, Users, Tag, Download, Plus, ChevronDown, ChevronUp, Check, Loader2 } from 'lucide-react';
+import { Settings, Users, Tag, Download, Plus, ChevronDown, ChevronUp, Check, Loader2, CreditCard } from 'lucide-react';
 import { PermissionGuard } from '@/components/layout/PermissionGuard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,10 +14,12 @@ import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
 import { User } from '@/types';
 import { toast } from '@/hooks/use-toast';
+import { CardFeesPanel } from '@/components/settings/CardFeesPanel';
 
 const TABS = [
   { id: 'store', label: 'Loja', icon: Settings },
   { id: 'categories', label: 'Categorias', icon: Tag },
+  { id: 'fees', label: 'Taxas do cartão', icon: CreditCard },
   { id: 'users', label: 'Usuários', icon: Users },
 ];
 
@@ -34,6 +36,11 @@ const ALL_PERMISSIONS = [
   { key: 'manage_inventory', label: 'Inventário', description: 'Contagens físicas e movimentações de estoque' },
   { key: 'cancel_sale', label: 'Cancelar Venda', description: 'Estornar venda — devolve o estoque' },
   { key: 'view_audit', label: 'Ver Auditoria', description: 'Histórico de tudo que foi alterado' },
+  {
+    key: 'view_financials',
+    label: 'Ver Dados Financeiros',
+    description: 'Dashboard, faturamento do dia, ticket médio e dinheiro em estoque',
+  },
 ];
 
 interface UserWithPermissions extends User {
@@ -440,6 +447,8 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       )}
+
+      {activeTab === 'fees' && <CardFeesPanel />}
 
       {/* Users */}
       {activeTab === 'users' && (

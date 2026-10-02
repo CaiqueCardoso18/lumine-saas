@@ -51,7 +51,16 @@ lumine_saas/
   sku/nome/marca/tamanho/cor/barcode/descrição curta/categoria/público) mantido por
   `buildSearchText()` em TODO write (CRUD e import). Cada termo digitado precisa
   aparecer nele, então "sapatilha rosa EUA" e "brise 38" funcionam.
-- Filtros: categoria, marca, tamanho, cor, público, status, estoque baixo e **preço**
+- **Filtros são multi-valor:** categoria, marca, tamanho, cor, público e status
+  aceitam vários de uma vez (`?size=P&size=M` → `{ in: [...] }`). Antes eram
+  exclusivos, então não dava para ver "saia E collant infantil" na mesma tela.
+  Cada valor marcado vira um chip próprio.
+- **Ordenação** por nome, sku, preço de venda, custo, estoque, tamanho, categoria
+  e cadastro (`sortBy`/`sortOrder`). No desktop clica no cabeçalho; no celular as
+  colunas somem, então o `SortControl` fica acima da lista. Vendas e Clientes têm
+  o mesmo controle.
+- `inStock=true` traz só quem tem peça disponível — é o que o PDV usa
+- Outros filtros: estoque baixo e **preço**
 - **Filtro de preço** tem três formas: faixas prontas com contagem (Até R$ 25,
   R$ 25 a R$ 50, R$ 50 a R$ 80, R$ 80 a R$ 150, R$ 150 a R$ 300, acima de R$ 300),
   intervalo livre, ou valor exato (`minPrice === maxPrice`, acha só quem custa
@@ -104,6 +113,10 @@ lumine_saas/
 
 ### 4. Vendas / PDV (`/api/sales/*`)
 - Registro de venda com múltiplos itens (carrinho)
+- **A busca do PDV só mostra produto com estoque** (`inStock=true`). Antes o
+  produto zerado aparecia e o aviso só vinha ao fechar a venda, com o carrinho
+  todo montado. Há um checkbox para incluir os zerados quando for necessário.
+  O `+` da quantidade também para no estoque disponível.
 - Busca de produto multi-termo (mesma do módulo de produtos)
 - Métodos: CASH, PIX, DEBIT_CARD, CREDIT_CARD, CREDIARIO, MIXED
 - **Pagamento misto:** o array `payments` divide o total entre formas. O backend
@@ -115,8 +128,26 @@ lumine_saas/
 - **Cliente opcional** (`customerId`) — venda de balcão não exige
 - Observação livre por venda (até 1000 caracteres)
 - Venda gera baixa automática no estoque (transação atômica)
-- Cancelamento/estorno devolve estoque; exige permissão `cancel_sale`
+- **Cancelamento/estorno** devolve estoque E cancela as parcelas em aberto do
+  crediário na mesma transação — sem isso a cliente continuava aparecendo como
+  devedora de uma venda estornada. Venda com parcela JÁ PAGA é recusada: reabra
+  a parcela primeiro, para decidir o que fazer com o dinheiro recebido.
+  Exige permissão `cancel_sale`.
+- `createSale` e `updateSale` agrupam linhas repetidas do mesmo produto
+  (`mergeSaleItems`) ANTES de validar estoque. Sem isso, duas linhas de 3
+  unidades passavam na checagem individual contra um estoque de 4 e a baixa
+  levava o produto para -2.
 - **Preço por item** só pode divergir do cadastro se quem vende for OWNER
+- **Editar venda** (PUT `/api/sales/:id`): só OWNER, exige motivo, e o estoque é
+  ajustado pela DIFERENÇA (`diffStock`) — trocar 2 por 3 pede -1, não +2 e -3, que
+  poderia falhar por falta de estoque no meio. Itens e pagamentos são recriados; o
+  retrato antigo fica no AuditLog. Venda cancelada ou **com crediário** não pode ser
+  editada: refazer as parcelas (e possíveis baixas) é estorno, não edição.
+- **Taxa da maquininha:** cada pagamento no cartão grava `feePercent`,
+  `feeAmount` e `netAmount`; a venda soma em `feeAmount` e `netTotal`. A taxa é
+  CONGELADA na venda — a tabela muda com o tempo e o histórico tem que refletir
+  o que a operadora cobrou naquele dia. O resumo devolve `totalFee` e
+  `netRevenue` além do faturamento bruto.
 
 ### 5. Pedidos de Reposição (`/api/orders/*`)
 - CRUD de pedidos para fornecedores
@@ -168,13 +199,58 @@ lumine_saas/
   nas primeiras parcelas, senão R$ 100 em 3x fecharia 99,99. `monthlyDueDates()`
   trata fim de mês — vencimento dia 31 cai no último dia de fevereiro em vez de
   escorregar para março.
+- **Frequência** (`crediarioFrequency`): WEEKLY (7 dias), BIWEEKLY (15) ou MONTHLY.
+  Semanal e quinzenal somam dias corridos; mensal anda de mês em mês. Fica gravada
+  em `Sale.installmentFrequency`.
+- **Entrada** (`downPayment`): sai do valor financiado e entra como pagamento à
+  vista na forma escolhida (`downPaymentMethod`). NÃO vira parcela — o dinheiro
+  entrou hoje e precisa aparecer no caixa do dia. `applyDownPayment()` em
+  `sales/helpers.ts` cuida disso, e a soma das formas continua fechando com o total.
+  Entrada igual ou maior que o crediário é recusada: nesse caso a venda é à vista.
+- **Editar parcela** (PATCH `/:id`) — valor, vencimento ou observação, só em
+  parcela PENDING. Parcela paga precisa ser reaberta antes, senão o caixa e a
+  parcela contariam histórias diferentes.
+- **Renegociar** (POST `/renegotiate`) — junta parcelas em aberto do MESMO cliente
+  num plano novo, com desconto ou juros (`adjustment`). As antigas viram
+  `RENEGOTIATED` apontando para a primeira nova via `renegotiatedIntoId`, em vez de
+  sumirem. Como `Installment` exige uma venda, as novas ficam na venda mais recente
+  do grupo.
+- Editar e renegociar exigem `cancel_sale` — mexem no que a loja tem a receber
+- **Atraso** começa no dia SEGUINTE ao vencimento (`startOfToday()` em
+  `shared/utils/date.ts`). Os vencimentos são gravados ao meio-dia para o fuso
+  não virar o dia, então comparar com `new Date()` fazia a parcela do dia virar
+  "atrasada" às 12h01.
 - `GET /summary` — em aberto, em atraso, recebido no mês, nº de devedores
 - `GET /debtors` — agrupado por cliente, ordenado por quem tem mais atraso
 - `POST /:id/pay` — baixa da parcela (valor, forma e observação)
 - `POST /:id/reopen` — desfaz a baixa; exige `cancel_sale`
 - Crediário sempre exige cliente — sem ele não há de quem cobrar
 
-### 11. Auditoria (`/api/audit/*`)
+### 11. Taxas de cartão (`/api/card-fees`)
+- Model `CardFee`: uma linha por (forma, nº de parcelas), `@@unique`
+- `GET /` — liberado a qualquer usuário: o PDV precisa para mostrar o líquido
+- `PUT /` — substitui a tabela inteira numa transação; só OWNER, e vai para o
+  AuditLog com antes/depois
+- `resolveFeePercent()` procura a linha exata da parcela e, não achando, cai na
+  de 1x. **Sem tabela cadastrada a taxa é zero** — a loja começa vazia e a venda
+  não pode travar por isso.
+- Débito não parcela: o validator rejeita `installments > 1` em DEBIT_CARD
+- Frontend: Configurações → Taxas do cartão
+
+### 12. Financeiro / Calendário (`/api/finance/*`)
+- Só OWNER — a tela mostra o caixa futuro da loja
+- `GET /calendar?year&month` — o que entra e sai, dia a dia. A receber vem das
+  parcelas PENDING; a pagar, do model `Payable`. Parcela RENEGOTIATED não entra:
+  foi substituída, e contá-la duplicaria a dívida.
+- Devolve só os dias COM lançamento; a tela desenha o mês e preenche o resto com
+  zero, para não trafegar 30 dias vazios a cada requisição
+- **Contas a pagar** (`Payable`): aluguel, fornecedor, energia. Os pedidos de
+  reposição não servem — não têm vencimento nem controle de pagamento.
+  `repeatMonths` cria N contas mensais de uma vez, usando o mesmo
+  `monthlyDueDates()` do crediário (dia 31 cai no último dia dos meses curtos).
+- Cancelar não apaga: vira CANCELLED e some do calendário, mas fica no histórico
+
+### 13. Auditoria (`/api/audit/*`)
 - Leitura do AuditLog, que já era gravado por todos os módulos mas não tinha consulta
 - `GET /api/audit` — paginado, filtros por ação, tipo de entidade, usuário e período
 - `GET /api/audit/facets` — contagem por dimensão para os dropdowns
@@ -182,8 +258,9 @@ lumine_saas/
   que realmente mudaram, mais o metadata bruto
 - Exige permissão `view_audit`
 
-### 12. Configurações (`/api/settings/*`)
+### 14. Configurações (`/api/settings/*`)
 - Perfil da loja (nome, logo, endereço)
+- Tabela de taxas do cartão (ver módulo 11)
 - CRUD de categorias e subcategorias
 - Estoque mínimo padrão
 - Gerenciar usuários
@@ -205,9 +282,24 @@ três precisam andar juntas.
 | `manage_inventory` | Contagens e movimentações de estoque |
 | `cancel_sale` | Estornar venda (mexe em estoque e caixa) |
 | `view_audit` | Tela de Auditoria |
+| `view_financials` | Dashboard inteiro, faturamento, ticket médio, dinheiro em estoque e totais do crediário |
 
 **Regras:**
 - OWNER ignora as permissões — acesso total
+- A lista fica em `backend/src/middleware/permissions.ts` (sem Prisma, para ser
+  testável isolada) e é reexportada por `requirePermission.ts`. Há um teste que
+  trava o conteúdo da lista e o padrão da vendedora.
+- **`view_financials` é negada por padrão.** Faturamento do dia, ticket médio e
+  o quanto a loja tem parado em estoque são números do NEGÓCIO, não ferramentas
+  de trabalho — a vendedora vende sem nenhum deles. Antes o dashboard era aberto
+  a qualquer usuário logado.
+  - `/dashboard` fica inacessível sem ela, e `homeRoute()` manda quem não tem
+    para `/sales` (o PDV). Sem isso o login jogaria a vendedora num redirect.
+  - Endpoints protegidos: `GET /api/products/stock-value`, `GET /api/sales/summary`
+    e `GET /api/crediario/summary`.
+  - O que CONTINUA liberado porque é operacional: `/api/products/low-stock`
+    (saber o que está acabando), a lista de vendas, e a lista de devedores e
+    parcelas do crediário (ela cobra no balcão).
 - `requirePermission()` valida no SERVIDOR. Antes as permissões só existiam no
   frontend, então um EMPLOYEE conseguia chamar a API direto e fazer qualquer coisa.
 - Permissões ficam em cache por 30s; `invalidatePermissionCache(userId)` é chamado
@@ -251,8 +343,8 @@ lumine-danger:         #D47B7B  (erros, alertas)
 ## Banco de Dados
 
 O schema Prisma completo está em `docs/DATABASE.md`. Models principais:
-- User, Category, Subcategory, Product
-- Sale, SaleItem, SalePayment
+- User, Category, Subcategory, Product, CardFee, Payable
+- Sale, SaleItem, SalePayment, Customer, Installment
 - Order, OrderItem, Supplier
 - Import, AuditLog, Setting
 
@@ -280,6 +372,17 @@ O schema Prisma completo está em `docs/DATABASE.md`. Models principais:
 - Feature components em `src/components/{feature}/`
 - React Query (TanStack Query) para cache e data fetching
 - Formulários com React Hook Form + Zod
+
+### Testes
+- `npm test` no backend roda só os testes de unidade (lógica pura, sem banco).
+  Cobrem o que dói se quebrar em silêncio: divisão de parcelas, datas de
+  vencimento, taxa de cartão, entrada do crediário, diff de estoque na edição de
+  venda e agregação do calendário.
+- `npm run test:integration` roda os `*.integration.test.ts`, que **exigem
+  Postgres de pé**. Ficam fora do `npm test` de propósito — teste que precisa de
+  infraestrutura para rodar acaba sendo ignorado quando falha.
+- A config é `jest.config.js` (não `.ts`: a versão em TypeScript exigia `ts-node`,
+  que não está nas dependências, e quebrava antes do primeiro teste).
 
 ### Geral
 - TypeScript strict em tudo

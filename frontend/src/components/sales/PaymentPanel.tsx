@@ -23,6 +23,21 @@ export interface SplitPayment {
 
 export type DiscountMode = 'value' | 'percent';
 
+/** Cadência das parcelas do crediário. */
+export type CrediarioFrequency = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
+
+export const FREQUENCY_LABELS: Record<CrediarioFrequency, string> = {
+  WEEKLY: 'Semanal (7 dias)',
+  BIWEEKLY: 'Quinzenal (15 dias)',
+  MONTHLY: 'Mensal',
+};
+
+const FREQUENCY_SHORT: Record<CrediarioFrequency, string> = {
+  WEEKLY: 'toda semana',
+  BIWEEKLY: 'a cada 15 dias',
+  MONTHLY: 'todo mês',
+};
+
 interface Props {
   paymentMethod: PaymentMethod;
   onPaymentMethodChange: (m: PaymentMethod) => void;
@@ -38,6 +53,13 @@ interface Props {
   onCrediarioCountChange: (n: number) => void;
   crediarioFirstDue: string;
   onCrediarioFirstDueChange: (d: string) => void;
+  crediarioFrequency: CrediarioFrequency;
+  onCrediarioFrequencyChange: (f: CrediarioFrequency) => void;
+  /** Entrada paga na hora — sai do valor financiado */
+  downPayment: number | null;
+  onDownPaymentChange: (v: number | null) => void;
+  downPaymentMethod: Exclude<PaymentMethod, 'MIXED' | 'CREDIARIO'>;
+  onDownPaymentMethodChange: (m: Exclude<PaymentMethod, 'MIXED' | 'CREDIARIO'>) => void;
   subtotal: number;
   discountAmount: number;
   total: number;
@@ -48,6 +70,12 @@ interface Props {
 }
 
 export function PaymentPanel(p: Props) {
+  // Entrada nunca pode cobrir o crediário inteiro — nesse caso não há o que
+  // financiar, e a venda deveria ser à vista
+  const entrada = Math.max(0, p.downPayment ?? 0);
+  const entradaInvalida = entrada > 0 && entrada >= p.crediarioAmount;
+  const financiado = Math.max(0, p.crediarioAmount - (entradaInvalida ? 0 : entrada));
+
   const splitSum = p.payments.reduce((acc, x) => acc + (x.amount ?? 0), 0);
   const splitDiff = Math.round((p.total - splitSum) * 100) / 100;
   const splitOk = Math.abs(splitDiff) < 0.005;
@@ -172,6 +200,43 @@ export function PaymentPanel(p: Props) {
           <Label className="text-xs">
             Crediário — {formatCurrency(p.crediarioAmount)}
           </Label>
+
+          {/* Entrada: sai do valor financiado e entra no caixa de hoje */}
+          <div className="flex gap-2">
+            <div className="flex-1 space-y-1">
+              <span className="text-xs text-lumine-warm-gray">Entrada (opcional)</span>
+              <MoneyInput
+                value={p.downPayment}
+                onValueChange={p.onDownPaymentChange}
+                placeholder="0,00"
+                className="h-9 text-sm"
+              />
+            </div>
+            {entrada > 0 && (
+              <div className="flex-1 space-y-1">
+                <span className="text-xs text-lumine-warm-gray">Entrada em</span>
+                <SelectMenu
+                  value={p.downPaymentMethod}
+                  onChange={(v) =>
+                    p.onDownPaymentMethodChange(v as Exclude<PaymentMethod, 'MIXED' | 'CREDIARIO'>)
+                  }
+                  dropUp
+                  options={(['CASH', 'PIX', 'DEBIT_CARD', 'CREDIT_CARD'] as const).map((m) => ({
+                    value: m,
+                    label: PAYMENT_METHOD_LABELS[m],
+                  }))}
+                />
+              </div>
+            )}
+          </div>
+
+          {entradaInvalida && (
+            <p className="text-xs text-lumine-danger">
+              A entrada precisa ser menor que o crediário. Para receber tudo hoje,
+              troque a forma de pagamento.
+            </p>
+          )}
+
           <div className="flex gap-2">
             <div className="flex-1 space-y-1">
               <span className="text-xs text-lumine-warm-gray">Parcelas</span>
@@ -182,23 +247,43 @@ export function PaymentPanel(p: Props) {
                 options={Array.from({ length: 12 }, (_, i) => i + 1).map((n) => ({
                   value: String(n),
                   label: `${n}x`,
-                  hint: formatCurrency(p.crediarioAmount / n),
+                  hint: formatCurrency(financiado / n),
                 }))}
               />
             </div>
             <div className="flex-1 space-y-1">
-              <span className="text-xs text-lumine-warm-gray">1º vencimento</span>
-              <Input
-                type="date"
-                value={p.crediarioFirstDue}
-                onChange={(e) => p.onCrediarioFirstDueChange(e.target.value)}
-                className="h-9 text-sm"
+              <span className="text-xs text-lumine-warm-gray">Frequência</span>
+              <SelectMenu
+                value={p.crediarioFrequency}
+                onChange={(v) => p.onCrediarioFrequencyChange(v as CrediarioFrequency)}
+                dropUp
+                options={(['MONTHLY', 'BIWEEKLY', 'WEEKLY'] as const).map((f) => ({
+                  value: f,
+                  label: FREQUENCY_LABELS[f],
+                }))}
               />
             </div>
           </div>
+
+          <div className="space-y-1">
+            <span className="text-xs text-lumine-warm-gray">1º vencimento</span>
+            <Input
+              type="date"
+              value={p.crediarioFirstDue}
+              onChange={(e) => p.onCrediarioFirstDueChange(e.target.value)}
+              className="h-9 text-sm"
+            />
+          </div>
+
           <p className="text-xs text-lumine-warm-gray">
-            {p.crediarioCount}x de {formatCurrency(p.crediarioAmount / p.crediarioCount)},
-            vencendo todo mês a partir da data escolhida.
+            {entrada > 0 && (
+              <>
+                Entrada de {formatCurrency(entrada)} em{' '}
+                {PAYMENT_METHOD_LABELS[p.downPaymentMethod]}, depois{' '}
+              </>
+            )}
+            {p.crediarioCount}x de {formatCurrency(financiado / p.crediarioCount)},
+            vencendo {FREQUENCY_SHORT[p.crediarioFrequency]} a partir da data escolhida.
           </p>
         </div>
       )}

@@ -42,6 +42,40 @@ export function monthlyDueDates(firstDue: Date, count: number): Date[] {
   });
 }
 
+/**
+ * Frequência de vencimento das parcelas.
+ *
+ * A loja tem cliente que paga de 15 em 15 dias, não só no mesmo dia do mês.
+ * Semanal e quinzenal somam dias corridos; mensal anda de mês em mês,
+ * respeitando o fim de mês (ver monthlyDueDates).
+ */
+export type InstallmentFrequency = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
+
+const DIAS_POR_FREQUENCIA: Record<'WEEKLY' | 'BIWEEKLY', number> = {
+  WEEKLY: 7,
+  BIWEEKLY: 15,
+};
+
+/** Datas somando dias corridos a partir da primeira. */
+function everyNDays(firstDue: Date, count: number, dias: number): Date[] {
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(firstDue);
+    d.setDate(d.getDate() + i * dias);
+    d.setHours(12, 0, 0, 0); // meio-dia evita virada de dia por fuso
+    return d;
+  });
+}
+
+/** Datas de vencimento na frequência escolhida. */
+export function dueDatesFor(
+  firstDue: Date,
+  count: number,
+  frequency: InstallmentFrequency
+): Date[] {
+  if (frequency === 'MONTHLY') return monthlyDueDates(firstDue, count);
+  return everyNDays(firstDue, count, DIAS_POR_FREQUENCIA[frequency]);
+}
+
 export interface PlannedInstallment {
   number: number;
   totalCount: number;
@@ -49,14 +83,22 @@ export interface PlannedInstallment {
   dueDate: Date;
 }
 
-/** Monta o plano completo de parcelas de uma venda no crediário. */
+/**
+ * Monta o plano completo de parcelas de uma venda no crediário.
+ *
+ * `total` aqui é o que SOBRA depois da entrada — a entrada é paga na hora e
+ * entra na venda como pagamento normal, não como parcela. Quem separa os dois
+ * é quem chama (createSale), porque a entrada também precisa aparecer no caixa
+ * do dia.
+ */
 export function planInstallments(
   total: number,
   count: number,
-  firstDue: Date
+  firstDue: Date,
+  frequency: InstallmentFrequency = 'MONTHLY'
 ): PlannedInstallment[] {
   const amounts = splitInstallments(total, count);
-  const dates = monthlyDueDates(firstDue, count);
+  const dates = dueDatesFor(firstDue, count, frequency);
 
   return amounts.map((amount, i) => ({
     number: i + 1,
@@ -64,4 +106,23 @@ export function planInstallments(
     amount,
     dueDate: dates[i],
   }));
+}
+
+/**
+ * Soma das parcelas antigas com o desconto/acréscimo da renegociação.
+ *
+ * Fica separado da função de serviço para ser testável sem banco: é aqui que
+ * mora o risco de centavo, e o erro só apareceria meses depois quando a
+ * cliente terminasse de pagar e ainda devesse R$ 0,01.
+ */
+export function computeRenegotiationTotal(
+  amounts: number[],
+  adjustment: number
+): { somaAntiga: number; novoTotal: number } {
+  const centavosAntigos = amounts.reduce((acc, a) => acc + Math.round(a * 100), 0);
+  const centavosNovos = centavosAntigos + Math.round(adjustment * 100);
+  return {
+    somaAntiga: centavosAntigos / 100,
+    novoTotal: centavosNovos / 100,
+  };
 }

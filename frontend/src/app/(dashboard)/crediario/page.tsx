@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Search, X, AlertCircle, Wallet, Users, CheckCircle2, Phone, Undo2, Loader2,
+  Pencil, Repeat,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -18,11 +19,14 @@ import {
   useCrediarioSummary, useDebtors, useInstallments,
   usePayInstallment, useReopenInstallment, Installment,
 } from '@/hooks/useCrediario';
+import { EditInstallmentDialog } from '@/components/crediario/EditInstallmentDialog';
+import { RenegotiateDialog } from '@/components/crediario/RenegotiateDialog';
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING: 'Em aberto',
   PAID: 'Paga',
   CANCELLED: 'Cancelada',
+  RENEGOTIATED: 'Renegociada',
 };
 
 function isOverdue(i: Installment) {
@@ -163,15 +167,18 @@ function PayDialog({
 }
 
 export default function CrediarioPage() {
-  const { isOwner } = usePermission();
+  const { isOwner, can } = usePermission();
+  const veFinanceiro = can('view_financials');
   const [tab, setTab] = useState<'debtors' | 'installments'>('debtors');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [onlyOverdue, setOnlyOverdue] = useState(false);
   const [page, setPage] = useState(1);
   const [paying, setPaying] = useState<Installment | null>(null);
+  const [editing, setEditing] = useState<Installment | null>(null);
+  const [renegotiating, setRenegotiating] = useState<{ id: string; name: string } | null>(null);
 
-  const summary = useCrediarioSummary().data;
+  const summary = useCrediarioSummary(veFinanceiro).data;
   const debtors = useDebtors().data ?? [];
   const reopen = useReopenInstallment();
 
@@ -193,35 +200,38 @@ export default function CrediarioPage() {
         </p>
       </div>
 
-      {/* Resumo */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          label="Em aberto"
-          value={formatCurrency(summary?.openAmount ?? 0)}
-          hint={`${summary?.openCount ?? 0} parcela(s)`}
-          icon={Wallet}
-        />
-        <StatCard
-          label="Em atraso"
-          value={formatCurrency(summary?.overdueAmount ?? 0)}
-          hint={`${summary?.overdueCount ?? 0} parcela(s)`}
-          icon={AlertCircle}
-          tone={summary?.overdueCount ? 'danger' : 'default'}
-        />
-        <StatCard
-          label="Recebido no mês"
-          value={formatCurrency(summary?.receivedThisMonth ?? 0)}
-          hint={`${summary?.receivedCount ?? 0} baixa(s)`}
-          icon={CheckCircle2}
-          tone="success"
-        />
-        <StatCard
-          label="Devedores"
-          value={String(summary?.debtorCount ?? 0)}
-          hint="com parcela em aberto"
-          icon={Users}
-        />
-      </div>
+      {/* Resumo — totais da loja, só para quem vê dados financeiros */}
+      {veFinanceiro && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            label="Em aberto"
+            value={formatCurrency(summary?.openAmount ?? 0)}
+            hint={`${summary?.openCount ?? 0} parcela(s)`}
+            icon={Wallet}
+          />
+          <StatCard
+            label="Em atraso"
+            value={formatCurrency(summary?.overdueAmount ?? 0)}
+            hint={`${summary?.overdueCount ?? 0} parcela(s)`}
+            icon={AlertCircle}
+            tone={summary?.overdueCount ? 'danger' : 'default'}
+          />
+          <StatCard
+            label="Recebido no mês"
+            value={formatCurrency(summary?.receivedThisMonth ?? 0)}
+            hint={`${summary?.receivedCount ?? 0} baixa(s)`}
+            icon={CheckCircle2}
+            tone="success"
+          />
+          <StatCard
+            label="Devedores"
+            value={String(summary?.debtorCount ?? 0)}
+            hint="com parcela em aberto"
+            icon={Users}
+          />
+        </div>
+
+      )}
 
       {/* Abas */}
       <div className="flex gap-1 bg-lumine-lavender-pale/50 p-1 rounded-xl w-fit">
@@ -301,6 +311,21 @@ export default function CrediarioPage() {
                         </p>
                       )}
                     </div>
+                    {/* Renegociar mexe no que a loja tem a receber — mesma
+                        regra de quem pode desfazer um recebimento */}
+                    {isOwner && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0"
+                        onClick={() =>
+                          setRenegotiating({ id: d.customer.id, name: d.customer.name })
+                        }
+                      >
+                        <Repeat size={13} className="mr-1" />
+                        Renegociar
+                      </Button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -399,9 +424,11 @@ export default function CrediarioPage() {
                               variant={
                                 i.status === 'PAID'
                                   ? 'success'
-                                  : atrasada
-                                    ? 'danger'
-                                    : 'warning'
+                                  : i.status === 'RENEGOTIATED'
+                                    ? 'default'
+                                    : atrasada
+                                      ? 'danger'
+                                      : 'warning'
                               }
                             >
                               {atrasada ? 'Atrasada' : STATUS_LABELS[i.status]}
@@ -434,7 +461,18 @@ export default function CrediarioPage() {
                           )}
                         </div>
 
-                        <div className="shrink-0">
+                        <div className="shrink-0 flex items-center gap-1">
+                          {i.status === 'PENDING' && isOwner && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8"
+                              title="Editar valor ou vencimento"
+                              onClick={() => setEditing(i)}
+                            >
+                              <Pencil size={13} />
+                            </Button>
+                          )}
                           {i.status === 'PENDING' ? (
                             <Button size="sm" onClick={() => setPaying(i)}>
                               Dar baixa
@@ -486,6 +524,14 @@ export default function CrediarioPage() {
       )}
 
       <PayDialog installment={paying} onClose={() => setPaying(null)} />
+      <EditInstallmentDialog installment={editing} onClose={() => setEditing(null)} />
+      {renegotiating && (
+        <RenegotiateDialog
+          customerId={renegotiating.id}
+          customerName={renegotiating.name}
+          onClose={() => setRenegotiating(null)}
+        />
+      )}
     </motion.div>
   );
 }

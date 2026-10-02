@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Search, Download, Edit, Trash2, AlertTriangle, Package,
   CheckSquare, Square, X, Tag, BarChart2, SlidersHorizontal, FileDown,
+  ArrowUpDown, ArrowUp, ArrowDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,9 +21,10 @@ import { exportProducts } from '@/lib/exportProducts';
 import { Product } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { ProductFormDialog } from '@/components/products/ProductFormDialog';
-import { FilterSelect, FilterChip, FilterOption } from '@/components/ui/filter-select';
+import { FilterSelect, MultiFilterSelect, FilterChip, FilterOption } from '@/components/ui/filter-select';
 import { PriceFilter, PriceBucket, PriceRange, describePriceRange } from '@/components/ui/price-filter';
 import { BulkEditPanel } from '@/components/products/BulkEditPanel';
+import { SortControl, SortState } from '@/components/ui/sort-control';
 import { usePermission } from '@/hooks/usePermission';
 
 const STATUS_BADGE: Record<string, 'success' | 'warning' | 'danger' | 'default'> = {
@@ -55,6 +57,56 @@ const STATUS_LABELS: Record<string, string> = {
   DISCONTINUED: 'Descontinuado',
 };
 
+/** Dimensões que aceitam mais de um valor ao mesmo tempo. */
+const MULTI_KEYS = ['categoryId', 'brand', 'size', 'color', 'audience', 'status'] as const;
+type MultiKey = (typeof MULTI_KEYS)[number];
+
+type SortKey =
+  | 'name' | 'sku' | 'salePrice' | 'costPrice' | 'quantity' | 'size' | 'category' | 'createdAt';
+/** Direção inicial de cada campo: texto sobe (A→Z), número e data descem. */
+const DEFAULT_ORDER: Record<SortKey, 'asc' | 'desc'> = {
+  name: 'asc', sku: 'asc', size: 'asc', category: 'asc',
+  salePrice: 'desc', costPrice: 'desc', quantity: 'desc', createdAt: 'desc',
+};
+
+const SORT_LABELS: Record<SortKey, string> = {
+  createdAt: 'Cadastro', name: 'Nome', sku: 'SKU', category: 'Categoria',
+  size: 'Tamanho', quantity: 'Estoque', salePrice: 'Preço de venda',
+  costPrice: 'Preço de custo',
+};
+
+/**
+ * Cabeçalho clicável que ordena a coluna.
+ *
+ * A seta só aparece na coluna ativa; nas outras fica o ícone neutro em opacidade
+ * baixa, para ficar claro que dá para clicar sem poluir a linha.
+ */
+function SortHeader({
+  by, label, sort, onSort, className,
+}: {
+  by: SortKey;
+  label: string;
+  sort: SortState<SortKey>;
+  onSort: (by: SortKey) => void;
+  className?: string;
+}) {
+  const ativo = sort.by === by;
+  const Icon = !ativo ? ArrowUpDown : sort.order === 'asc' ? ArrowUp : ArrowDown;
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(by)}
+      title={`Ordenar por ${label.toLowerCase()}`}
+      className={`inline-flex items-center gap-1 text-xs uppercase tracking-wide transition-colors ${
+        ativo ? 'text-lumine-lavender font-medium' : 'text-lumine-warm-gray hover:text-lumine-sage'
+      } ${className ?? ''}`}
+    >
+      {label}
+      <Icon size={12} className={ativo ? '' : 'opacity-40'} />
+    </button>
+  );
+}
+
 function ProductsPageContent() {
   const qc = useQueryClient();
   const searchParams = useSearchParams();
@@ -63,11 +115,16 @@ function ProductsPageContent() {
   const canManage = can('manage_products');
 
   const [search, setSearch] = useState('');
-  const [filters, setFilters] = useState({
-    categoryId: '', brand: '', size: '', color: '',
-    audience: '', status: '', lowStock: '',
+  /**
+   * Cada dimensão é uma LISTA: dá para marcar Saia e Collant ao mesmo tempo,
+   * em vez de ter que escolher um só. Lista vazia = sem filtro naquela dimensão.
+   */
+  const [filters, setFilters] = useState<Record<MultiKey, string[]>>({
+    categoryId: [], brand: [], size: [], color: [], audience: [], status: [],
   });
+  const [lowStock, setLowStock] = useState(false);
   const [price, setPrice] = useState<PriceRange>({});
+  const [sort, setSort] = useState<SortState<SortKey>>({ by: 'createdAt', order: 'desc' });
   const [page, setPage] = useState(1);
 
   function setPriceRange(range: PriceRange) {
@@ -75,28 +132,54 @@ function ProductsPageContent() {
     setPage(1);
   }
 
-  function setFilter(key: keyof typeof filters, value: string) {
-    setFilters((prev) => ({ ...prev, [key]: value }));
+  function setFilter(key: MultiKey, values: string[]) {
+    setFilters((prev) => ({ ...prev, [key]: values }));
     setPage(1);
   }
 
+  /** Tira um valor específico de uma dimensão (usado pelos chips). */
+  function removeValue(key: MultiKey, value: string) {
+    setFilter(key, filters[key].filter((v) => v !== value));
+  }
+
   function clearFilters() {
-    setFilters({ categoryId: '', brand: '', size: '', color: '', audience: '', status: '', lowStock: '' });
+    setFilters({ categoryId: [], brand: [], size: [], color: [], audience: [], status: [] });
+    setLowStock(false);
     setPrice({});
     setSearch('');
     setPage(1);
   }
 
-  // Params compartilhados entre a listagem e os facets
+  /**
+   * Clique no cabeçalho: primeira vez ordena, segunda inverte.
+   * Texto começa em A→Z, número e data começam do maior, que é o que se espera
+   * de "mais caro" ou "mais recente".
+   */
+  function toggleSort(by: SortKey) {
+    setSort((prev) =>
+      prev.by === by
+        ? { by, order: prev.order === 'asc' ? 'desc' : 'asc' }
+        : { by, order: DEFAULT_ORDER[by] }
+    );
+    setPage(1);
+  }
+
+  // Params compartilhados entre a listagem e os facets.
+  // Multi-valor vai repetido na URL (?size=P&size=M) — é o formato que o Express
+  // entrega como array para o backend.
   const filterParams = new URLSearchParams();
   if (search) filterParams.set('search', search);
-  Object.entries(filters).forEach(([k, v]) => { if (v) filterParams.set(k, v); });
+  MULTI_KEYS.forEach((k) => filters[k].forEach((v) => filterParams.append(k, v)));
+  if (lowStock) filterParams.set('lowStock', 'true');
   if (price.min !== undefined) filterParams.set('minPrice', String(price.min));
   if (price.max !== undefined) filterParams.set('maxPrice', String(price.max));
   const filterKey = filterParams.toString();
 
   const precoAtivo = price.min !== undefined || price.max !== undefined;
-  const activeCount = Object.values(filters).filter(Boolean).length + (precoAtivo ? 1 : 0);
+  const activeCount =
+    MULTI_KEYS.reduce((acc, k) => acc + filters[k].length, 0) +
+    (precoAtivo ? 1 : 0) +
+    (lowStock ? 1 : 0);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -111,11 +194,13 @@ function ProductsPageContent() {
   }, [searchParams]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['products', page, filterKey],
+    queryKey: ['products', page, filterKey, sort.by, sort.order],
     queryFn: () => {
       const params = new URLSearchParams(filterKey);
       params.set('page', String(page));
       params.set('limit', '20');
+      params.set('sortBy', sort.by);
+      params.set('sortOrder', sort.order);
       return api.paginated<Product>(`/api/products?${params}`);
     },
     placeholderData: (prev) => prev,
@@ -242,51 +327,51 @@ function ProductsPageContent() {
             Filtros
           </span>
 
-          <FilterSelect
+          <MultiFilterSelect
             label="Categoria"
             placeholder="Todas"
-            value={filters.categoryId}
+            values={filters.categoryId}
             onChange={(v) => setFilter('categoryId', v)}
             options={(facets?.categories ?? []).map((c) => ({
               value: c.value, label: c.label, count: c.count,
             }))}
             searchable
           />
-          <FilterSelect
+          <MultiFilterSelect
             label="Marca"
             placeholder="Todas"
-            value={filters.brand}
+            values={filters.brand}
             onChange={(v) => setFilter('brand', v)}
             options={asOptions(facets?.brands)}
             searchable
           />
-          <FilterSelect
+          <MultiFilterSelect
             label="Tamanho"
             placeholder="Todos"
-            value={filters.size}
+            values={filters.size}
             onChange={(v) => setFilter('size', v)}
             options={asOptions(facets?.sizes)}
             searchable
           />
-          <FilterSelect
+          <MultiFilterSelect
             label="Cor"
             placeholder="Todas"
-            value={filters.color}
+            values={filters.color}
             onChange={(v) => setFilter('color', v)}
             options={asOptions(facets?.colors)}
             searchable
           />
-          <FilterSelect
+          <MultiFilterSelect
             label="Público"
             placeholder="Todos"
-            value={filters.audience}
+            values={filters.audience}
             onChange={(v) => setFilter('audience', v)}
             options={asOptions(facets?.audiences, AUDIENCE_LABELS)}
           />
-          <FilterSelect
+          <MultiFilterSelect
             label="Status"
             placeholder="Todos"
-            value={filters.status}
+            values={filters.status}
             onChange={(v) => setFilter('status', v)}
             options={asOptions(facets?.statuses, STATUS_LABELS)}
           />
@@ -299,9 +384,9 @@ function ProductsPageContent() {
 
           <button
             type="button"
-            onClick={() => setFilter('lowStock', filters.lowStock ? '' : 'true')}
+            onClick={() => { setLowStock((v) => !v); setPage(1); }}
             className={`flex items-center gap-1.5 h-9 px-3 rounded-xl border text-sm transition-all whitespace-nowrap ${
-              filters.lowStock
+              lowStock
                 ? 'border-lumine-danger bg-lumine-danger/10 text-lumine-danger ring-1 ring-lumine-danger/40'
                 : 'border-lumine-lavender-pale bg-white text-lumine-warm-gray hover:border-lumine-lavender'
             }`}
@@ -320,36 +405,40 @@ function ProductsPageContent() {
             {search && (
               <FilterChip label="Busca" value={search} onRemove={() => { setSearch(''); setPage(1); }} />
             )}
-            {filters.categoryId && (
+            {/* Um chip por valor: com multi-seleção, "Categoria: 3" não diria quais */}
+            {filters.categoryId.map((id) => (
               <FilterChip
+                key={`cat-${id}`}
                 label="Categoria"
-                value={facets?.categories.find((c) => c.value === filters.categoryId)?.label ?? '—'}
-                onRemove={() => setFilter('categoryId', '')}
+                value={facets?.categories.find((c) => c.value === id)?.label ?? '—'}
+                onRemove={() => removeValue('categoryId', id)}
               />
-            )}
-            {filters.brand && (
-              <FilterChip label="Marca" value={filters.brand} onRemove={() => setFilter('brand', '')} />
-            )}
-            {filters.size && (
-              <FilterChip label="Tamanho" value={filters.size} onRemove={() => setFilter('size', '')} />
-            )}
-            {filters.color && (
-              <FilterChip label="Cor" value={filters.color} onRemove={() => setFilter('color', '')} />
-            )}
-            {filters.audience && (
+            ))}
+            {filters.brand.map((v) => (
+              <FilterChip key={`marca-${v}`} label="Marca" value={v} onRemove={() => removeValue('brand', v)} />
+            ))}
+            {filters.size.map((v) => (
+              <FilterChip key={`tam-${v}`} label="Tamanho" value={v} onRemove={() => removeValue('size', v)} />
+            ))}
+            {filters.color.map((v) => (
+              <FilterChip key={`cor-${v}`} label="Cor" value={v} onRemove={() => removeValue('color', v)} />
+            ))}
+            {filters.audience.map((v) => (
               <FilterChip
+                key={`pub-${v}`}
                 label="Público"
-                value={AUDIENCE_LABELS[filters.audience] ?? filters.audience}
-                onRemove={() => setFilter('audience', '')}
+                value={AUDIENCE_LABELS[v] ?? v}
+                onRemove={() => removeValue('audience', v)}
               />
-            )}
-            {filters.status && (
+            ))}
+            {filters.status.map((v) => (
               <FilterChip
+                key={`st-${v}`}
                 label="Status"
-                value={STATUS_LABELS[filters.status] ?? filters.status}
-                onRemove={() => setFilter('status', '')}
+                value={STATUS_LABELS[v] ?? v}
+                onRemove={() => removeValue('status', v)}
               />
-            )}
+            ))}
             {precoAtivo && (
               <FilterChip
                 label="Preço"
@@ -357,8 +446,8 @@ function ProductsPageContent() {
                 onRemove={() => setPriceRange({})}
               />
             )}
-            {filters.lowStock && (
-              <FilterChip label="Estoque" value="Baixo" onRemove={() => setFilter('lowStock', '')} />
+            {lowStock && (
+              <FilterChip label="Estoque" value="Baixo" onRemove={() => { setLowStock(false); setPage(1); }} />
             )}
 
             <button
@@ -424,11 +513,22 @@ function ProductsPageContent() {
       {/* Table */}
       <Card>
         <CardHeader className="pb-0">
-          <div className="flex items-center justify-between text-sm text-lumine-warm-gray">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-lumine-warm-gray">
             <span>{meta?.total ?? 0} produtos encontrados</span>
-            {meta && meta.totalPages > 1 && (
-              <span>Página {meta.page} de {meta.totalPages}</span>
-            )}
+            <div className="flex items-center gap-2">
+              {/* No celular as colunas somem, então a ordenação precisa existir aqui também */}
+              <SortControl
+                value={sort}
+                onChange={(next) => { setSort(next); setPage(1); }}
+                options={(Object.keys(SORT_LABELS) as SortKey[]).map((k) => ({
+                  value: k, label: SORT_LABELS[k],
+                }))}
+                defaultOrder={DEFAULT_ORDER}
+              />
+              {meta && meta.totalPages > 1 && (
+                <span className="whitespace-nowrap">Página {meta.page} de {meta.totalPages}</span>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -443,9 +543,15 @@ function ProductsPageContent() {
                   }
                 </button>
               )}
-              <span className="text-xs text-lumine-warm-gray uppercase tracking-wide flex-1">Produto</span>
-              <span className="text-xs text-lumine-warm-gray uppercase tracking-wide hidden sm:block w-16 text-center">Estoque</span>
-              <span className="text-xs text-lumine-warm-gray uppercase tracking-wide hidden md:block w-28 text-right">Preço</span>
+              <span className="flex-1">
+                <SortHeader by="name" label="Produto" sort={sort} onSort={toggleSort} />
+              </span>
+              <span className="hidden sm:flex w-16 justify-center">
+                <SortHeader by="quantity" label="Estoque" sort={sort} onSort={toggleSort} />
+              </span>
+              <span className="hidden md:flex w-28 justify-end">
+                <SortHeader by="salePrice" label="Preço" sort={sort} onSort={toggleSort} />
+              </span>
               <span className="w-16" />
             </div>
           )}

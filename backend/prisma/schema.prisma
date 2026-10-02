@@ -130,6 +130,14 @@ enum Audience {
 // SALES (PDV)
 // ============================================================
 
+/// Frequência de vencimento das parcelas do crediário.
+/// A loja tem cliente que paga de 15 em 15 dias, não só no mesmo dia do mês.
+enum InstallmentFrequency {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
 enum PaymentMethod {
   CASH
   PIX
@@ -153,9 +161,19 @@ model Sale {
   discountAmount  Decimal       @default(0) @map("discount_amount") @db.Decimal(10, 2)
   discountPercent Decimal?      @map("discount_percent") @db.Decimal(5, 2)
   total           Decimal       @db.Decimal(10, 2)
+  // Taxa da maquininha descontada do total e o que sobra de fato.
+  // Guardado na venda porque a tabela de taxas muda com o tempo e o
+  // histórico precisa refletir o que foi cobrado NAQUELE dia.
+  feeAmount       Decimal       @default(0) @map("fee_amount") @db.Decimal(10, 2)
+  netTotal        Decimal       @default(0) @map("net_total") @db.Decimal(10, 2)
   paymentMethod   PaymentMethod @map("payment_method")
   status          SaleStatus    @default(COMPLETED)
   notes           String?
+  // Crediário: entrada paga na hora e cadência das parcelas.
+  // A entrada NÃO vira parcela — entra como pagamento normal, porque
+  // também precisa aparecer no caixa do dia.
+  downPayment     Decimal       @default(0) @map("down_payment") @db.Decimal(10, 2)
+  installmentFrequency InstallmentFrequency? @map("installment_frequency")
   cancelledAt     DateTime?     @map("cancelled_at")
   cancelReason    String?       @map("cancel_reason")
   createdAt       DateTime      @default(now()) @map("created_at")
@@ -206,6 +224,9 @@ enum InstallmentStatus {
   PENDING
   PAID
   CANCELLED
+  /// Substituída por uma parcela nova numa renegociação. Fica no histórico
+  /// apontando para a substituta em vez de sumir.
+  RENEGOTIATED
 }
 
 /// Parcela de crediário. Gerada na venda quando o pagamento é CREDIARIO
@@ -223,6 +244,9 @@ model Installment {
   paidAmount  Decimal?          @map("paid_amount") @db.Decimal(10, 2)
   paidMethod  PaymentMethod?    @map("paid_method")
   notes       String?
+  // Renegociação: a parcela antiga vira RENEGOTIATED e aponta para a nova,
+  // em vez de sumir. Assim o histórico de cobrança não some do nada.
+  renegotiatedIntoId String?    @map("renegotiated_into_id")
   createdAt   DateTime          @default(now()) @map("created_at")
   updatedAt   DateTime          @updatedAt @map("updated_at")
 
@@ -261,6 +285,10 @@ model SalePayment {
   method       PaymentMethod
   amount       Decimal       @db.Decimal(10, 2)
   installments Int           @default(1) // parcelas (só relevante p/ CREDIT_CARD)
+  // Taxa aplicada a ESTA forma. No misto cada cartão tem a sua.
+  feePercent   Decimal       @default(0) @map("fee_percent") @db.Decimal(5, 2)
+  feeAmount    Decimal       @default(0) @map("fee_amount") @db.Decimal(10, 2)
+  netAmount    Decimal       @default(0) @map("net_amount") @db.Decimal(10, 2)
   createdAt    DateTime      @default(now()) @map("created_at")
 
   sale      Sale          @relation(fields: [saleId], references: [id])
@@ -290,6 +318,7 @@ model Supplier {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
+  payables    Payable[]
   orders      Order[]
 
   @@map("suppliers")
@@ -482,6 +511,55 @@ model AuditLog {
 // ============================================================
 // SETTINGS
 // ============================================================
+
+/// Tabela de taxas da maquininha.
+///
+/// Uma linha por (forma, nº de parcelas): débito tem uma só, crédito tem uma
+/// por parcela, porque a operadora cobra mais conforme parcela. Sem linha
+/// cadastrada a taxa é zero — assim nada quebra antes de a loja preencher.
+model CardFee {
+  id           String        @id @default(cuid())
+  method       PaymentMethod
+  installments Int           @default(1)
+  feePercent   Decimal       @map("fee_percent") @db.Decimal(5, 2)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  @@unique([method, installments])
+  @@map("card_fees")
+}
+
+enum PayableStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+/// Conta a pagar: aluguel, fornecedor, energia, o que a loja deve.
+///
+/// Os pedidos de reposição não servem para isso — eles não têm vencimento
+/// nem controle de pagamento, só o fluxo de recebimento de mercadoria.
+model Payable {
+  id          String        @id @default(cuid())
+  description String
+  /// Rótulo livre (Aluguel, Fornecedor, Energia...) para agrupar no relatório
+  category    String?
+  supplierId  String?       @map("supplier_id")
+  amount      Decimal       @db.Decimal(10, 2)
+  dueDate     DateTime      @map("due_date")
+  status      PayableStatus @default(PENDING)
+  paidAt      DateTime?     @map("paid_at")
+  paidAmount  Decimal?      @map("paid_amount") @db.Decimal(10, 2)
+  notes       String?
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  supplier    Supplier?     @relation(fields: [supplierId], references: [id])
+
+  @@index([dueDate])
+  @@index([status])
+  @@map("payables")
+}
 
 model Setting {
   id        String   @id @default(cuid())
