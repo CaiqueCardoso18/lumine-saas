@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { randomBytes } from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -83,19 +84,27 @@ async function main() {
   }
   console.log(`✅ ${defaultSettings.length} configurações criadas`);
 
-  // Criar usuário OWNER padrão
-  const ownerExists = await prisma.user.findUnique({ where: { email: 'admin@lumine.com.br' } });
+  // Criar usuário OWNER padrão.
+  // Email e senha vêm do ambiente (SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD).
+  // Sem senha definida, gera uma aleatória e mostra uma única vez no terminal,
+  // para nunca existir senha padrão conhecida em produção.
+  const adminEmail = process.env.SEED_ADMIN_EMAIL || 'admin@lumine.local';
+  const ownerExists = await prisma.user.findUnique({ where: { email: adminEmail } });
   if (!ownerExists) {
-    const passwordHash = await bcrypt.hash('Lumine@2024!', 12);
+    const plainPassword = process.env.SEED_ADMIN_PASSWORD || randomBytes(12).toString('base64url');
+    const passwordHash = await bcrypt.hash(plainPassword, 12);
     await prisma.user.create({
       data: {
-        email: 'admin@lumine.com.br',
+        email: adminEmail,
         passwordHash,
         name: 'Administrador Lumine',
         role: 'OWNER',
       },
     });
-    console.log('✅ Usuário admin criado: admin@lumine.com.br / Lumine@2024!');
+    console.log(`✅ Usuário admin criado: ${adminEmail}`);
+    if (!process.env.SEED_ADMIN_PASSWORD) {
+      console.log(`   Senha gerada (anote agora, não será mostrada de novo): ${plainPassword}`);
+    }
   }
 
   console.log('🎉 Seed concluído com sucesso!');
