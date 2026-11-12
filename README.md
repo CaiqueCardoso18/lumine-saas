@@ -1,117 +1,72 @@
-# Lumine — SaaS de Gestão
+# Lumine
 
-Sistema completo de gestão para a loja **Lumine** (artigos de dança). Cobre estoque, PDV, pedidos de reposição, analytics e insights.
+**A full management system for a dance apparel store, built and running in production.** Inventory, point of sale, store credit with installments, receivables and payables, supplier orders, customer records, audit log, analytics and automatic business insights. It replaced a generic monthly-fee ERP and runs on a single small VPS for about R$ 31 a month.
+
+*Sistema de gestão sob medida para a Lumine, loja de artigos de dança: estoque, PDV, crediário, financeiro, pedidos, clientes, analytics e insights.*
+
+## Highlights
+
+- **14 backend modules** with role-based permissions: auth, products, inventory, sales (POS), customers, store credit (crediário), finance (receivables, payables, card fees), supplier orders, upload, analytics, insights, audit, settings.
+- **Store credit engine** with installment schedules that never lose a cent to rounding, renegotiation, overdue tracking and card-fee aware net revenue.
+- **Bulk product import** from spreadsheets with a preview and confirm step before anything is written.
+- **Analytics and insights** (revenue by period, top products, categories, stock alerts and sales patterns) with Recharts dashboards.
+- **Audit trail** on sensitive actions, indexed by user.
+- **Production setup:** Docker Compose behind Caddy (automatic HTTPS) on a Hetzner VPS, CI with lint, Jest unit and integration tests against a real Postgres service, and deploy on push via GitHub Actions.
 
 ## Stack
 
-| Camada | Tecnologia |
-|---|---|
-| Frontend | Next.js 14 · TypeScript · Tailwind CSS · shadcn/ui · Recharts |
-| Backend | Node.js · Express · TypeScript · Prisma ORM |
-| Banco | PostgreSQL 16 |
-| Auth | JWT em httpOnly cookies · bcrypt |
-| Infra | Docker · Caddy · Hetzner VPS |
-| CI/CD | GitHub Actions |
+| Layer | Technology |
+| --- | --- |
+| Frontend | Next.js 14 (App Router), TypeScript, Tailwind CSS, shadcn/ui, TanStack Query, Recharts, React Hook Form, Zod |
+| Backend | Node.js, Express, TypeScript, Prisma ORM |
+| Database | PostgreSQL 16 (20 models, versioned migrations) |
+| Auth | JWT in httpOnly cookies, bcrypt, permission middleware |
+| Infra | Docker, Caddy, Hetzner VPS, GitHub Actions (CI and deploy) |
+| Tests | Jest (unit and integration) |
 
-## Rodando localmente
+## Architecture
 
-### Pré-requisitos
+```mermaid
+flowchart LR
+    U[Store staff] --> C[Caddy HTTPS]
+    C --> F[Next.js frontend]
+    F -- /api proxy --> B[Express API]
+    B --> M[Permission middleware]
+    M --> S[Modules: sales, crediario, finance, inventory, ...]
+    S --> P[(PostgreSQL via Prisma)]
+    S --> A[Audit log]
+```
 
-- Node.js 20 LTS
-- Docker Desktop
-- Git
+## Running locally
 
-### 1. Clonar e configurar
+Requirements: Node.js 20, Docker.
 
 ```bash
-git clone https://github.com/SEU_USUARIO/lumine_saas.git
-cd lumine_saas
-
-# Copiar variáveis de ambiente
 cp .env.example backend/.env
-# Edite backend/.env se necessário
-```
+docker compose -f docker/docker-compose.dev.yml up -d   # Postgres
 
-### 2. Subir o PostgreSQL
-
-```bash
-docker compose -f docker/docker-compose.dev.yml up -d
-```
-
-### 3. Backend
-
-```bash
 cd backend
 npm install
-npx prisma migrate dev --name init
-npm run db:seed          # Popula categorias + usuário admin
-npm run dev              # Inicia em http://localhost:4000
-```
+npx prisma migrate dev
+npm run db:seed        # categories and a first admin user
+npm run dev            # http://localhost:4000
 
-### 4. Frontend
-
-```bash
-cd frontend
+cd ../frontend
 npm install
-npm run dev              # Inicia em http://localhost:3000
+npm run dev            # http://localhost:3000
 ```
 
-### Credenciais padrão (seed)
+The seed creates a local admin account; see `backend/prisma/seed.ts` and change the password before any real use.
+
+## Layout
 
 ```
-Email: admin@lumine.com.br
-Senha: Lumine@2024!
+backend/    Express API, Prisma schema and migrations, modules, middleware, tests
+frontend/   Next.js app (dashboard routes per module)
+docker/     Dockerfiles and Compose files for dev and production
+docs/       architecture, database, infrastructure and roadmap notes
 ```
 
-## Estrutura
+## License
 
-```
-lumine_saas/
-├── backend/          # Express API + Prisma
-│   ├── src/
-│   │   ├── modules/  # auth, products, sales, orders, analytics, insights, upload, settings
-│   │   ├── middleware/
-│   │   ├── config/
-│   │   └── shared/
-│   └── prisma/       # Schema + seed
-├── frontend/         # Next.js 14
-│   └── src/
-│       ├── app/      # Rotas (App Router)
-│       ├── components/
-│       ├── hooks/
-│       └── lib/
-├── docker/           # Dockerfiles + Compose
-├── docs/             # Arquitetura, banco, infra, roadmap
-└── .github/workflows # CI + Deploy
-```
-
-## API Endpoints principais
-
-| Módulo | Base |
-|---|---|
-| Auth | `POST /api/auth/login` · `GET /api/auth/me` |
-| Produtos | `GET/POST /api/products` · `PATCH /api/products/bulk` |
-| Upload | `POST /api/upload/preview` · `POST /api/upload/confirm` |
-| Vendas | `GET/POST /api/sales` · `POST /api/sales/:id/cancel` |
-| Pedidos | `GET/POST /api/orders` · `PATCH /api/orders/:id/status` |
-| Analytics | `GET /api/analytics/revenue` · `/top-products` · `/categories` |
-| Insights | `GET /api/insights` · `/stock` · `/sales` |
-| Config | `GET/PUT /api/settings` · `/categories` · `/users` |
-
-## Deploy (produção)
-
-```bash
-# 1. Setup inicial da VPS (executar uma vez como root)
-bash docs/vps-setup.sh
-
-# 2. Configurar GitHub Secrets:
-#    VPS_HOST, VPS_SSH_KEY, DB_NAME, DB_USER, DB_PASSWORD,
-#    JWT_SECRET, FRONTEND_URL, API_URL
-
-# 3. Push para main dispara deploy automático via GitHub Actions
-git push origin main
-```
-
-## Licença
-
-Proprietário — Lumine © 2024
+Proprietary. Source shown as a portfolio sample.
